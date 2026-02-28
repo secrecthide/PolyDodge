@@ -37,7 +37,8 @@ async function startServer() {
   } else {
     // Serve static files in production
     app.use(express.static(path.resolve(__dirname, "dist")));
-    app.get("*", (req, res) => {
+    // Use regex to match all routes for SPA fallback in Express 5+
+    app.get(/(.*)/, (req, res) => {
       res.sendFile(path.resolve(__dirname, "dist", "index.html"));
     });
   }
