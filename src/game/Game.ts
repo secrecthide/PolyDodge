@@ -414,8 +414,15 @@ export class Game {
         const distXZ = Math.sqrt(dx*dx + dz*dz);
         
         if (distXZ < minDistance && dy < 3.0) {
-          minDistance = distXZ;
-          closestBallId = id;
+          // Check if looking at it
+          const toBall = new THREE.Vector3().subVectors(ball.mesh.position, this.camera.position).normalize();
+          const lookDir = new THREE.Vector3();
+          this.camera.getWorldDirection(lookDir);
+
+          if (lookDir.dot(toBall) > 0.8) {
+            minDistance = distXZ;
+            closestBallId = id;
+          }
         }
       }
     });
@@ -1487,7 +1494,12 @@ export class Game {
         this.balls.forEach(ball => {
           if (ball.data.state === 'idle' || ball.data.state === 'thrown') {
             if (this.camera.position.distanceTo(ball.mesh.position) < 4.0) {
-              canPick = true;
+              const toBall = new THREE.Vector3().subVectors(ball.mesh.position, this.camera.position).normalize();
+              const lookDir = new THREE.Vector3();
+              this.camera.getWorldDirection(lookDir);
+              if (lookDir.dot(toBall) > 0.8) {
+                canPick = true;
+              }
             }
           }
         });

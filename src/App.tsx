@@ -84,13 +84,13 @@ export default function App() {
       if (moveContainer) {
         const manager = nipplejs.create({
           zone: moveContainer,
-          mode: 'semi',
-          catchDistance: 150,
-          position: { left: isLandscape ? '100px' : '80px', bottom: isLandscape ? '100px' : '80px' },
+          mode: 'dynamic',
           color: 'white',
-          size: isLandscape ? 140 : 120,
-          restOpacity: 0.5,
-          threshold: 0.1
+          size: isLandscape ? 80 : 100,
+          restOpacity: 0,
+          threshold: 0.1,
+          multitouch: true,
+          maxNumberOfNipples: 1
         });
 
         manager.on('move', (evt, data) => {
@@ -625,7 +625,7 @@ export default function App() {
         {gameState === 'playing' && (
           <>
             {/* Chat UI */}
-            <div className={`absolute bottom-24 left-6 z-[100] w-full max-w-[300px] pointer-events-none flex flex-col gap-2 ${isMobile ? 'scale-75 origin-bottom-left !bottom-20 !left-4' : ''}`}>
+            <div className={`absolute bottom-24 left-6 z-[100] w-full max-w-[300px] pointer-events-none flex flex-col gap-2 ${isMobile ? (isLandscape ? 'scale-[0.4] origin-bottom-left !bottom-2 !left-2' : 'scale-75 origin-bottom-left !bottom-20 !left-4') : ''}`}>
               <div className="flex-1 overflow-y-auto max-h-[200px] flex flex-col gap-1 pointer-events-none custom-scrollbar">
                 {chatMessages.map(msg => (
                   <motion.div 
@@ -683,7 +683,7 @@ export default function App() {
                   animate={{ scale: 1, opacity: 1 }}
                   className="text-center"
                 >
-                  <h2 className={`${isMobile && isLandscape ? 'text-4xl' : 'text-6xl'} font-black italic tracking-tighter drop-shadow-2xl ${hudData.roundWinner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
+                  <h2 className={`${isMobile && isLandscape ? 'text-3xl' : 'text-6xl'} font-black italic tracking-tighter drop-shadow-2xl ${hudData.roundWinner === 'blue' ? 'text-blue-400' : 'text-red-400'}`}>
                     {hudData.roundWinner.toUpperCase()} ROUND WIN!
                   </h2>
                 </motion.div>
@@ -705,10 +705,10 @@ export default function App() {
                   exit={{ scale: 1.5, opacity: 0 }}
                   className="text-center"
                 >
-                  <h1 className={`${isMobile && isLandscape ? 'text-[6rem]' : 'text-[12rem]'} font-black italic text-white drop-shadow-[0_0_50px_rgba(255,255,255,0.8)] stroke-black stroke-2`}>
+                  <h1 className={`${isMobile && isLandscape ? 'text-[4rem]' : 'text-[12rem]'} font-black italic text-white drop-shadow-[0_0_50px_rgba(255,255,255,0.8)] stroke-black stroke-2`}>
                     {countdown}
                   </h1>
-                  <p className={`${isMobile && isLandscape ? 'text-xl' : 'text-4xl'} font-bold uppercase tracking-[1em] text-white/80 mt-4 animate-pulse`}>Get Ready</p>
+                  <p className={`${isMobile && isLandscape ? 'text-lg' : 'text-4xl'} font-bold uppercase tracking-[1em] text-white/80 mt-4 animate-pulse`}>Get Ready</p>
                 </motion.div>
               </div>
             )}
@@ -724,7 +724,7 @@ export default function App() {
             )}
 
             {hudData.isOut && (
-              <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-30 text-center">
+              <div className={`absolute left-1/2 -translate-x-1/2 z-30 text-center ${isMobile && isLandscape ? 'bottom-8 scale-75 origin-bottom' : 'bottom-32'}`}>
                 <motion.div 
                   initial={{ y: 20, opacity: 0 }}
                   animate={{ y: 0, opacity: 1 }}
@@ -760,7 +760,7 @@ export default function App() {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`absolute inset-0 pointer-events-none p-4 md:p-6 flex flex-col justify-between ${isMobile ? (isLandscape ? 'scale-[0.7] origin-center' : 'scale-[0.85] origin-center') : ''}`}
+              className={`absolute inset-0 pointer-events-none p-4 md:p-6 flex flex-col justify-between ${isMobile ? (isLandscape ? 'scale-[0.45] origin-top' : 'scale-[0.85] origin-center') : ''}`}
             >
             <div className={`flex justify-between items-start w-full ${isMobile && !isLandscape ? 'flex-col items-center gap-2' : ''}`}>
               {/* Left: Empty now (removed Active/Eliminated) */}
@@ -816,7 +816,7 @@ export default function App() {
             </div>
 
             {/* Kill Feed */}
-            <div className="absolute top-4 right-4 flex flex-col gap-2 items-end pointer-events-none z-50">
+            <div className={`absolute top-4 right-4 flex flex-col gap-2 items-end pointer-events-none z-50 ${isMobile && isLandscape ? 'scale-75 origin-top-right' : ''}`}>
               <AnimatePresence>
                 {hudData.killFeed?.map((kill: any) => (
                   <motion.div
@@ -857,10 +857,10 @@ export default function App() {
                 />
                 
                 <div className="absolute inset-0 pointer-events-none z-50">
-                  <div id="joystick-move" className="absolute bottom-0 left-0 w-1/2 h-1/2 pointer-events-auto" />
+                  <div id="joystick-move" className="absolute top-0 bottom-0 left-0 w-1/2 pointer-events-auto" />
                   
                   {/* Action Buttons */}
-                  <div className={`absolute bottom-32 right-8 flex flex-col gap-6 pointer-events-auto items-end ${isLandscape ? '!bottom-16 !right-16' : ''}`}>
+                  <div className={`absolute bottom-32 right-8 flex flex-col gap-4 pointer-events-auto items-end ${isLandscape ? '!bottom-4 !right-12 scale-[0.6] origin-bottom-right' : ''}`}>
                   <button 
                     onClick={() => setShowEmoteWheel(true)}
                     className="w-14 h-14 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all shadow-xl"
@@ -886,7 +886,7 @@ export default function App() {
                 </div>
 
                 {/* Mobile Pause Button */}
-                <div className={`absolute top-4 left-4 pointer-events-auto ${isLandscape ? 'scale-75 origin-top-left' : ''}`}>
+                <div className={`absolute top-4 left-4 pointer-events-auto ${isLandscape ? 'scale-[0.6] origin-top-left' : ''}`}>
                   <button 
                     onClick={() => setShowInGameMenu(true)}
                     className="w-10 h-10 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all"
@@ -902,7 +902,7 @@ export default function App() {
           )}
 
             {/* Bottom HUD: Stamina & Charge */}
-            <div className={`flex justify-center items-end pb-6 gap-6 ${isMobile ? (isLandscape ? 'scale-[0.6] origin-bottom opacity-50 pointer-events-none' : 'scale-75 origin-bottom opacity-50 pointer-events-none') : ''}`}>
+            <div className={`flex justify-center items-end pb-6 gap-6 ${isMobile ? (isLandscape ? 'scale-[0.45] origin-bottom opacity-60 pointer-events-none' : 'scale-75 origin-bottom opacity-50 pointer-events-none') : ''}`}>
               {/* Emote Button (PC) */}
               {!isMobile && (
                 <button 
@@ -1013,7 +1013,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={`absolute inset-0 z-50 flex bg-zinc-950 overflow-y-auto ${isMobile && !isLandscape ? 'flex-col' : 'flex-row'} ${isMobile ? 'scale-[0.9] md:scale-100 origin-center' : ''}`}
+            className={`absolute inset-0 z-50 flex bg-zinc-950 overflow-y-auto ${isMobile && !isLandscape ? 'flex-col' : 'flex-row'} ${isMobile ? (isLandscape ? 'scale-[0.55] origin-center' : 'scale-[0.9] md:scale-100 origin-center') : ''}`}
           >
             {/* Split Layout: Left Side (Branding & Profile) */}
             <div className={`relative flex-1 flex flex-col justify-between ${isMobile && isLandscape ? 'p-4' : 'p-6 md:p-16'} border-r border-white/5 ${isMobile && !isLandscape ? 'min-h-screen' : ''}`}>
@@ -1172,7 +1172,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-4xl bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col ${isMobile ? 'scale-[0.85] md:scale-100 origin-center' : ''} ${isMobile && isLandscape ? 'max-h-[95vh]' : ''}`}
+              className={`w-full max-w-4xl bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col ${isMobile ? (isLandscape ? 'scale-[0.55] origin-center' : 'scale-[0.85] md:scale-100 origin-center') : ''} ${isMobile && isLandscape ? 'max-h-[95vh]' : ''}`}
             >
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-12'} text-center border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent`}>
                 <div className={`flex items-center justify-center gap-3 ${isMobile && isLandscape ? 'mb-2' : 'mb-6'}`}>
@@ -1278,7 +1278,7 @@ export default function App() {
       {/* Game End Overlay - Remade */}
       {showGameEnd && (
         <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 font-sans">
-          <div className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300 ${isMobile ? 'scale-[0.85] md:scale-100 origin-center' : ''}`}>
+          <div className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300 ${isMobile ? (isLandscape ? 'scale-[0.55] origin-center' : 'scale-[0.85] md:scale-100 origin-center') : ''}`}>
             {/* Header */}
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8 md:p-10'} text-center ${hudData.winner === 'blue' ? 'bg-blue-900/20' : 'bg-red-900/20'} border-b border-white/5 relative overflow-hidden`}>
                 <div className={`absolute inset-0 opacity-10 ${hudData.winner === 'blue' ? 'bg-blue-500' : 'bg-red-500'} blur-3xl`} />
@@ -1406,7 +1406,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col h-[85vh] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${isMobile ? (isLandscape ? 'scale-[0.7] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
+              className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col h-[85vh] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${isMobile ? (isLandscape ? 'scale-[0.55] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
             >
               {/* Header */}
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8 md:p-12'} border-b border-white/5 flex items-end justify-between bg-gradient-to-b from-white/5 to-transparent`}>
@@ -1556,7 +1556,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, y: 40 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-sm bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] ${isMobile ? (isLandscape ? 'scale-[0.7] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
+              className={`w-full max-w-sm bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-[0_0_100px_rgba(0,0,0,0.8)] ${isMobile ? (isLandscape ? 'scale-[0.55] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
             >
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-12'} text-center bg-gradient-to-b from-white/5 to-transparent`}>
                 <div className={`flex items-center justify-center gap-3 ${isMobile && isLandscape ? 'mb-2' : 'mb-6'}`}>
@@ -1615,7 +1615,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-2xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl ${isMobile ? (isLandscape ? 'scale-[0.7] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
+              className={`w-full max-w-2xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl ${isMobile ? (isLandscape ? 'scale-[0.6] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
             >
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8 md:p-12'} border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent`}>
                 <div className={`flex items-center gap-3 ${isMobile && isLandscape ? 'mb-2' : 'mb-4'}`}>
@@ -1797,7 +1797,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-4xl bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh] ${isMobile ? (isLandscape ? 'scale-[0.7] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
+              className={`w-full max-w-4xl bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col max-h-[90vh] ${isMobile ? (isLandscape ? 'scale-[0.6] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
             >
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-12'} border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent flex justify-between items-end`}>
                 <div>
