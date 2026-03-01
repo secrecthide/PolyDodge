@@ -98,19 +98,28 @@ export class SoundManager {
 
   public stopCharge() {
     if (this.chargeGain && this.ctx) {
-      this.chargeGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.1);
-      setTimeout(() => {
-        if (this.chargeOsc) {
-          this.chargeOsc.stop();
-          this.chargeOsc.disconnect();
-          this.chargeOsc = null;
-        }
-        if (this.chargeGain) {
-          this.chargeGain.disconnect();
-          this.chargeGain = null;
-        }
-      }, 150);
+      try {
+        this.chargeGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+        const osc = this.chargeOsc;
+        const gain = this.chargeGain;
+        setTimeout(() => {
+          if (osc) {
+            try { osc.stop(); osc.disconnect(); } catch(e) {}
+          }
+          if (gain) {
+            try { gain.disconnect(); } catch(e) {}
+          }
+        }, 100);
+      } catch(e) {}
+      this.chargeOsc = null;
+      this.chargeGain = null;
     }
+  }
+
+  public stopAllSounds() {
+    this.stopCharge();
+    // In a more complex manager we'd track all active nodes, 
+    // but for this simple one, stopCharge is the main culprit for "stuck" sounds.
   }
 
   public playCrowdGasp() {
@@ -141,11 +150,6 @@ export class SoundManager {
     gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 1.5);
     
     noise.start();
-  }
-
-  public playHeartbeat() {
-    this.playTone(60, 'sine', 0.1, 0.5, true);
-    setTimeout(() => this.playTone(50, 'sine', 0.1, 0.4, true), 150);
   }
 }
 

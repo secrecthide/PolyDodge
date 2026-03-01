@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Game } from './game/Game';
 import nipplejs from 'nipplejs';
-import { Target, Trophy, Heart, Shield, Users, Play, Info, Zap, Globe, Settings, HelpCircle, X, Palette, ShoppingCart, ChevronRight, ChevronLeft, Volume2, VolumeX, Smartphone, Monitor, Lock } from 'lucide-react';
+import { Target, Trophy, Heart, Shield, Users, Play, Info, Zap, Globe, Settings, HelpCircle, X, Palette, ShoppingCart, ChevronRight, ChevronLeft, Volume2, VolumeX, Smartphone, Monitor, Lock, WifiOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { io, Socket } from 'socket.io-client';
 
@@ -11,6 +11,8 @@ export default function App() {
   const [gameState, setGameState] = useState<'menu' | 'playing'>('menu');
   const [isMobile, setIsMobile] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [isMouseLocked, setIsMouseLocked] = useState(false);
+  const [isDisconnected, setIsDisconnected] = useState(false);
   const joystickRef = useRef<any>(null);
   const lookTouchId = useRef<number | null>(null);
   const lastLookTouch = useRef<{ x: number, y: number } | null>(null);
@@ -82,10 +84,13 @@ export default function App() {
       if (moveContainer) {
         const manager = nipplejs.create({
           zone: moveContainer,
-          mode: 'static',
+          mode: 'semi',
+          catchDistance: 150,
           position: { left: isLandscape ? '100px' : '80px', bottom: isLandscape ? '100px' : '80px' },
           color: 'white',
-          size: isLandscape ? 140 : 120
+          size: isLandscape ? 140 : 120,
+          restOpacity: 0.5,
+          threshold: 0.1
         });
 
         manager.on('move', (evt, data) => {
@@ -359,7 +364,7 @@ export default function App() {
         if (hudCallbackRef.current) {
           hudCallbackRef.current(data);
         }
-      });
+      }, setIsMouseLocked);
     }
   }, []);
 
@@ -601,7 +606,7 @@ export default function App() {
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Crosshair */}
-      {gameState === 'playing' && (
+      {gameState === 'playing' && (isMouseLocked || isMobile) && !hudData.isOut && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
           <div className={`w-4 h-4 border-2 rounded-full flex items-center justify-center transition-all duration-200 ${
             hudData.canPickUp ? 'border-emerald-400 scale-150' : 
@@ -612,9 +617,6 @@ export default function App() {
               hudData.isAimingAtEnemy ? 'bg-red-500' : 'bg-white'
             }`} />
           </div>
-          {hudData.canPickUp && (
-            <div className="absolute mt-16" />
-          )}
         </div>
       )}
 
@@ -959,19 +961,42 @@ export default function App() {
                   <motion.div 
                     initial={{ scale: 0.9, y: 20 }}
                     animate={{ scale: 1, y: 0 }}
-                    className="bg-zinc-900 border border-white/10 rounded-3xl p-6 grid grid-cols-2 gap-3 max-w-xs shadow-2xl"
+                    className={`relative w-80 h-80 flex items-center justify-center ${isMobile ? 'scale-75' : ''}`}
                     onClick={e => e.stopPropagation()}
                   >
-                    <div className="col-span-2 text-center text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2">Select Emote</div>
-                    {emotes.map(emote => (
-                      <button 
-                        key={emote}
-                        onClick={() => sendEmote(emote)}
-                        className="bg-white/5 hover:bg-emerald-500 hover:text-black border border-white/10 p-3 rounded-xl font-bold text-xs transition-all active:scale-95"
-                      >
-                        {emote}
-                      </button>
-                    ))}
+                    {/* Radial Wheel */}
+                    <div className="absolute inset-0 rounded-full border-4 border-white/5 bg-black/20 backdrop-blur-sm" />
+                    <div className="relative z-10 text-center">
+                       <div className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-1">Emote</div>
+                       <div className="text-white/20 text-xs">Select One</div>
+                    </div>
+
+                    {emotes.map((emote, i) => {
+                      const angle = (i / emotes.length) * Math.PI * 2 - Math.PI / 2;
+                      const x = Math.cos(angle) * 110;
+                      const y = Math.sin(angle) * 110;
+                      return (
+                        <motion.button 
+                          key={emote}
+                          initial={{ opacity: 0, scale: 0 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: i * 0.05 }}
+                          onClick={() => {
+                            sendEmote(emote);
+                            setShowEmoteWheel(false);
+                          }}
+                          style={{ 
+                            position: 'absolute',
+                            left: `calc(50% + ${x}px)`,
+                            top: `calc(50% + ${y}px)`,
+                            transform: 'translate(-50%, -50%)'
+                          }}
+                          className="w-16 h-16 bg-zinc-900 hover:bg-emerald-500 hover:text-black border border-white/10 rounded-full font-bold text-[10px] transition-all active:scale-95 flex items-center justify-center p-2 text-center shadow-xl"
+                        >
+                          {emote}
+                        </motion.button>
+                      );
+                    })}
                   </motion.div>
                 </motion.div>
               )}
@@ -988,7 +1013,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={`absolute inset-0 z-50 flex bg-zinc-950 overflow-y-auto ${isMobile && !isLandscape ? 'flex-col' : 'flex-row'}`}
+            className={`absolute inset-0 z-50 flex bg-zinc-950 overflow-y-auto ${isMobile && !isLandscape ? 'flex-col' : 'flex-row'} ${isMobile ? 'scale-[0.9] md:scale-100 origin-center' : ''}`}
           >
             {/* Split Layout: Left Side (Branding & Profile) */}
             <div className={`relative flex-1 flex flex-col justify-between ${isMobile && isLandscape ? 'p-4' : 'p-6 md:p-16'} border-r border-white/5 ${isMobile && !isLandscape ? 'min-h-screen' : ''}`}>
@@ -1147,7 +1172,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.9, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-4xl bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col ${isMobile && isLandscape ? 'scale-[0.8] max-h-[95vh]' : ''}`}
+              className={`w-full max-w-4xl bg-zinc-900 border border-white/10 rounded-[3rem] overflow-hidden shadow-2xl flex flex-col ${isMobile ? 'scale-[0.85] md:scale-100 origin-center' : ''} ${isMobile && isLandscape ? 'max-h-[95vh]' : ''}`}
             >
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-12'} text-center border-b border-white/5 bg-gradient-to-b from-white/5 to-transparent`}>
                 <div className={`flex items-center justify-center gap-3 ${isMobile && isLandscape ? 'mb-2' : 'mb-6'}`}>
@@ -1253,7 +1278,7 @@ export default function App() {
       {/* Game End Overlay - Remade */}
       {showGameEnd && (
         <div className="fixed inset-0 z-[9999] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4 font-sans">
-          <div className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300 ${isMobile ? (isLandscape ? 'scale-[0.7] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}>
+          <div className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] animate-in fade-in zoom-in duration-300 ${isMobile ? 'scale-[0.85] md:scale-100 origin-center' : ''}`}>
             {/* Header */}
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8 md:p-10'} text-center ${hudData.winner === 'blue' ? 'bg-blue-900/20' : 'bg-red-900/20'} border-b border-white/5 relative overflow-hidden`}>
                 <div className={`absolute inset-0 opacity-10 ${hudData.winner === 'blue' ? 'bg-blue-500' : 'bg-red-500'} blur-3xl`} />
@@ -1855,6 +1880,44 @@ export default function App() {
                 </button>
               </div>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Disconnected Popup */}
+      <AnimatePresence>
+        {isDisconnected && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="fixed inset-0 z-[10000] bg-black/80 backdrop-blur-md flex items-center justify-center p-6"
+          >
+            <div className="bg-zinc-900 border border-red-500/30 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl">
+              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <WifiOff className="w-8 h-8 text-red-500" />
+              </div>
+              <h2 className="text-2xl font-black text-white mb-2 uppercase italic tracking-tighter">Connection Lost</h2>
+              <p className="text-white/60 text-sm mb-8">You have been disconnected from the arena. Please check your connection.</p>
+              <div className="flex flex-col gap-3">
+                <button 
+                  onClick={() => window.location.reload()}
+                  className="w-full bg-white text-black font-black py-4 rounded-xl hover:bg-emerald-400 transition-colors uppercase tracking-widest text-xs"
+                >
+                  Reconnect
+                </button>
+                <button 
+                  onClick={() => {
+                    setIsDisconnected(true); // Keep it true but go to menu
+                    setGameState('menu');
+                    if (gameRef.current) gameRef.current.dispose();
+                    gameRef.current = null;
+                    setIsDisconnected(false);
+                  }}
+                  className="w-full bg-white/5 text-white font-black py-4 rounded-xl hover:bg-white/10 transition-colors uppercase tracking-widest text-xs"
+                >
+                  Back to Menu
+                </button>
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

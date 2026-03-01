@@ -66,8 +66,13 @@ export class Game {
   private socket: Socket | null = null;
   private lastHeartbeatTime: number = 0;
 
-  constructor(container: HTMLElement, onUpdateHUD: (data: any) => void) {
+  private lastThrowTime: number = 0;
+  private lastThrownBallId: number | null = null;
+  private onLockChange?: (locked: boolean) => void;
+
+  constructor(container: HTMLElement, onUpdateHUD: (data: any) => void, onLockChange?: (locked: boolean) => void) {
     this.onUpdateHUD = onUpdateHUD;
+    this.onLockChange = onLockChange;
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x111111);
     this.scene.fog = new THREE.FogExp2(0x111111, 0.02);
@@ -88,6 +93,13 @@ export class Game {
       if (!this.controls.isLocked && !this.isMobile && this.gameActive) {
         this.controls.lock();
       }
+    });
+
+    this.controls.addEventListener('lock', () => {
+      if (this.onLockChange) this.onLockChange(true);
+    });
+    this.controls.addEventListener('unlock', () => {
+      if (this.onLockChange) this.onLockChange(false);
     });
     
     this.setupLights();
@@ -499,6 +511,9 @@ export class Game {
     this.stamina = Math.max(0, this.stamina - (10 + charge * 20));
     this.lastStaminaUseTime = Date.now();
     
+    this.lastThrowTime = Date.now();
+    this.lastThrownBallId = ballId;
+    
     this.onBallThrown(ballId, position, velocity, this.myId || 'local', type, curveFactor);
     
     if (this.socket) {
@@ -615,6 +630,7 @@ export class Game {
     this.isCharging = false;
     this.isBlocking = false;
     this.velocity.set(0, 0, 0);
+    if (this.fpBall) this.fpBall.visible = false;
     this.onUpdateHUD({ 
       stamina: 100, 
       chargeLevel: 0, 
@@ -796,6 +812,22 @@ export class Game {
     this.balls.clear();
     this.bots.clear();
     
+    // Reset local state
+    this.stamina = 100;
+    this.chargeLevel = 0;
+    this.isCharging = false;
+    this.isBlocking = false;
+    this.velocity.set(0, 0, 0);
+    if (this.fpBall) this.fpBall.visible = false;
+    this.onUpdateHUD({ 
+      stamina: 100, 
+      chargeLevel: 0, 
+      isBlocking: false,
+      holding: false,
+      canPickUp: false,
+      isOut: false
+    });
+
     const localPlayer: PlayerData = {
       id: 'local',
       name: 'You',
@@ -1073,6 +1105,10 @@ export class Game {
       if (playerId === this.myId) {
         this.onUpdateHUD({ isOut: true });
         if (this.fpBall) this.fpBall.visible = false;
+        this.isCharging = false;
+        this.isBlocking = false;
+        sounds.stopAllSounds();
+        
         // Drop ball if holding
         if (player.data.holdingBallId !== null) {
           const ball = this.balls.get(player.data.holdingBallId);
@@ -1234,16 +1270,6 @@ export class Game {
        );
     } else if (this.fpBall) {
        this.fpBall.position.set(0.4, -0.3, -0.6);
-    }
-
-    // Heartbeat Sound (Last Player)
-    if (myPlayer && !myPlayer.data.isOut) {
-      const myTeam = myPlayer.data.team;
-      const teammatesAlive = Array.from(this.players.values()).filter(p => p.data.team === myTeam && !p.data.isOut).length;
-      if (teammatesAlive === 1 && Date.now() - this.lastHeartbeatTime > 1000) {
-        sounds.playHeartbeat();
-        this.lastHeartbeatTime = Date.now();
-      }
     }
 
     this.updateBalls(delta);
@@ -1414,6 +1440,9 @@ export class Game {
     this.controls.moveRight(-this.velocity.x * delta);
     this.controls.moveForward(-this.velocity.z * delta);
 
+    // Force ground level to prevent flying
+    this.camera.position.y = 1.6;
+
     // Arena bounds & Center line (Dodgeball Rules)
     const limit = ARENA_SIZE / 2 - 2.0;
     
@@ -1442,7 +1471,7 @@ export class Game {
 
       if (moved || rotated || this.isCharging) {
         this.socket.emit('player_move', {
-          position: pos,
+          position: { x: pos.x, y: pos.y - 1.6, z: pos.z },
           rotation: { y: rotationY }
         });
         this.lastSyncedRotation = rotationY;
@@ -1487,6 +1516,7 @@ export class Game {
   public dispose() {
     this.gameActive = false;
     document.exitPointerLock();
+    sounds.stopAllSounds();
     // Clear scene
     while(this.scene.children.length > 0){ 
       this.scene.remove(this.scene.children[0]); 
@@ -1539,17 +1569,13 @@ export class Game {
     const closestPoint = new THREE.Vector3();
 
     this.players.forEach((player, playerId) => {
-      // Skip if it's the owner or if the player is already out
-      if (playerId === ball.data.owner || !player.mesh.visible || player.data.isOut) {
-        // Special case: if it's the local player, we use camera position, but we still check visibility/isOut
-        if (playerId === this.myId || playerId === 'local') {
-          if (player.data.isOut) return;
-          // If we are the owner, skip
-          if (playerId === ball.data.owner) return;
-        } else {
-          return;
-        }
+      // Grace period for thrower to avoid self-kill
+      if (playerId === ball.data.owner) {
+        if (Date.now() - this.lastThrowTime < 100 && id === this.lastThrownBallId) return;
       }
+
+      // Skip if the player is already out or invisible
+      if (!player.mesh.visible || player.data.isOut) return;
 
       if (ballOwner && ballOwner.data.team === player.data.team) return;
 
