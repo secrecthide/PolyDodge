@@ -83,9 +83,9 @@ export default function App() {
         const manager = nipplejs.create({
           zone: moveContainer,
           mode: 'static',
-          position: { left: isLandscape ? '60px' : '80px', bottom: isLandscape ? '60px' : '80px' },
+          position: { left: isLandscape ? '100px' : '80px', bottom: isLandscape ? '100px' : '80px' },
           color: 'white',
-          size: isLandscape ? 80 : 100
+          size: isLandscape ? 140 : 120
         });
 
         manager.on('move', (evt, data) => {
@@ -858,27 +858,27 @@ export default function App() {
                   <div id="joystick-move" className="absolute bottom-0 left-0 w-1/2 h-1/2 pointer-events-auto" />
                   
                   {/* Action Buttons */}
-                  <div className={`absolute bottom-32 right-8 flex flex-col gap-4 pointer-events-auto items-end ${isLandscape ? 'scale-75 origin-bottom-right !bottom-12 !right-4' : ''}`}>
+                  <div className={`absolute bottom-32 right-8 flex flex-col gap-6 pointer-events-auto items-end ${isLandscape ? '!bottom-16 !right-16' : ''}`}>
                   <button 
                     onClick={() => setShowEmoteWheel(true)}
-                    className="w-12 h-12 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all shadow-xl"
+                    className="w-14 h-14 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all shadow-xl"
                   >
-                    <span className="text-xl">💬</span>
+                    <span className="text-2xl">💬</span>
                   </button>
                   <button 
                     onTouchStart={() => gameRef.current?.setMobileAction('throw', true)}
                     onTouchEnd={() => gameRef.current?.setMobileAction('throw', false)}
-                    className="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:bg-white/40 active:scale-90 transition-all shadow-2xl"
+                    className="w-24 h-24 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:bg-white/40 active:scale-90 transition-all shadow-2xl"
                   >
-                    <Target className="w-8 h-8" />
+                    <Target className="w-12 h-12" />
                   </button>
-                  <div className="flex gap-4">
+                  <div className="flex gap-6">
                     <button 
                       onTouchStart={() => gameRef.current?.setMobileAction('block', true)}
                       onTouchEnd={() => gameRef.current?.setMobileAction('block', false)}
-                      className="w-14 h-14 rounded-full bg-blue-500/20 backdrop-blur-md border border-blue-500/30 flex items-center justify-center active:bg-blue-500/50 active:scale-90 transition-all shadow-xl"
+                      className="w-20 h-20 rounded-full bg-blue-500/20 backdrop-blur-md border border-blue-500/30 flex items-center justify-center active:bg-blue-500/50 active:scale-90 transition-all shadow-xl"
                     >
-                      <Shield className="w-6 h-6 text-blue-400" />
+                      <Shield className="w-10 h-10 text-blue-400" />
                     </button>
                   </div>
                 </div>
