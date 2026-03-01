@@ -368,8 +368,25 @@ export default function App() {
   }, [sensitivity]);
 
   useEffect(() => {
-    const newSocket = io();
+    // Force connection to production URL for Android APK compatibility
+    const SOCKET_URL = "https://polydodge.onrender.com";
+    
+    const newSocket = io(SOCKET_URL, {
+      transports: ["websocket"], // Force WebSocket to avoid polling issues on Android
+      reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+    });
+    
     setSocket(newSocket);
+
+    newSocket.on('connect', () => {
+      console.log('Connected to server:', newSocket.id);
+    });
+
+    newSocket.on('connect_error', (err) => {
+      console.error('Socket connection error:', err);
+    });
 
     newSocket.on('disconnect', () => {
       console.log('Disconnected from server');
