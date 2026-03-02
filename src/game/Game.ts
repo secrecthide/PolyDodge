@@ -78,6 +78,7 @@ export class Game {
     this.scene.fog = new THREE.FogExp2(0x111111, 0.02);
 
     this.camera = new THREE.PerspectiveCamera(70, container.clientWidth / container.clientHeight, 0.1, 1000);
+    this.camera.rotation.order = 'YXZ';
     this.camera.position.y = 1.6; // Match bot height
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1334,24 +1335,14 @@ export class Game {
     this.mobileMove.y = y;
   }
 
-  public setMobileLook(dx: number, dy: number) {
-    const myPlayer = this.myId ? this.players.get(this.myId) : null;
-    if (myPlayer && myPlayer.data.isOut) {
-      this.spectateOrbit.x -= dx * 0.005 * this.sensitivity;
-      this.spectateOrbit.y = Math.max(0.1, Math.min(Math.PI / 2 - 0.1, this.spectateOrbit.y + dy * 0.005 * this.sensitivity));
-      return;
-    }
-
-    // For mobile look, we rotate the camera directly since pointer lock is for mouse
-    const sensitivity = 0.002 * this.sensitivity;
-    this.camera.rotation.y -= dx * sensitivity;
+  public rotateCamera(dx: number, dy: number) {
+    const lookSpeed = 0.002 * this.sensitivity;
+    this.camera.rotation.y -= dx * lookSpeed;
+    this.camera.rotation.x -= dy * lookSpeed;
     
-    // Clamp vertical rotation
-    const pitch = this.camera.rotation.x - dy * sensitivity;
-    this.camera.rotation.x = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, pitch));
-    
-    // Ensure order is YXZ for FPS style
-    this.camera.rotation.order = 'YXZ';
+    // Clamp pitch to prevent flipping
+    const maxPitch = Math.PI / 2 - 0.01;
+    this.camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, this.camera.rotation.x));
   }
 
   public setMobileAction(action: 'throw' | 'block', active: boolean) {
@@ -1411,15 +1402,15 @@ export class Game {
       }
     }
 
-    // Holding Ball Timer (Eliminate if held too long > 10s)
+    // Holding Ball Timer (Removed timeout kill)
     if (myPlayer.holdingBallId !== null) {
       const ball = this.balls.get(myPlayer.holdingBallId);
-      if (ball && Date.now() - ball.data.lastInteractionTime > 10000) {
-        this.onPlayerOut(this.myId!, 'timeout');
-        if (this.socket) {
-          this.socket.emit('player_hit', { targetId: this.myId });
-        }
+      if (ball) {
+        const holdTime = Date.now() - ball.data.lastInteractionTime;
+        this.onUpdateHUD({ holdTime, maxHoldTime: 10000 });
       }
+    } else {
+      this.onUpdateHUD({ holdTime: 0 });
     }
 
     // Balanced movement

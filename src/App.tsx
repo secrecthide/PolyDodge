@@ -8,12 +8,16 @@ import { io, Socket } from 'socket.io-client';
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Game | null>(null);
+  const joystickMoveContainerRef = useRef<HTMLDivElement>(null);
   const [gameState, setGameState] = useState<'menu' | 'playing'>('menu');
   const [isMobile, setIsMobile] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [isMouseLocked, setIsMouseLocked] = useState(false);
   const [isDisconnected, setIsDisconnected] = useState(false);
   const joystickRef = useRef<any>(null);
+  // Right joystick removed as per user request
+  
+  // Touch look refs
   const lookTouchId = useRef<number | null>(null);
   const lastLookTouch = useRef<{ x: number, y: number } | null>(null);
   
@@ -42,8 +46,7 @@ export default function App() {
         const dy = touch.clientY - lastLookTouch.current.y;
         
         if (gameRef.current) {
-          // Scale down the delta for smoother looking
-          gameRef.current.setMobileLook(dx, dy);
+          gameRef.current.rotateCamera(dx, dy);
         }
         
         lastLookTouch.current = { x: touch.clientX, y: touch.clientY };
@@ -77,17 +80,50 @@ export default function App() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+
+
+  const [hudData, setHudData] = useState({
+    score: 0,
+    team: 'blue',
+    holding: false,
+    canPickUp: false,
+    isOut: false,
+    isAimingAtEnemy: false,
+    winner: null as string | null,
+    roundWinner: null as string | null,
+    stamina: 100,
+    chargeLevel: 0,
+    isBlocking: false,
+    timer: 180,
+    bluePlayersLeft: 4,
+    redPlayersLeft: 4,
+    blueWins: 0,
+    redWins: 0,
+    matchState: 'playing' as 'warmup' | 'playing' | 'finished',
+    killFeed: [] as any[],
+    roundStartTimestamp: 0,
+    scoreboard: null as any[] | null,
+    playAgainVotes: [] as string[] | null,
+    holdTime: 0,
+    maxHoldTime: 10000
+  });
+
   useEffect(() => {
     if (gameState === 'playing' && isMobile) {
-      // Initialize movement joystick
-      const moveContainer = document.getElementById('joystick-move');
+      // Initialize movement joystick (Left) - Dynamic Mode
+      const moveContainer = joystickMoveContainerRef.current;
       if (moveContainer) {
+        // Clear any existing nipplejs instances in this container just in case
+        while (moveContainer.firstChild) {
+          moveContainer.removeChild(moveContainer.firstChild);
+        }
+
         const manager = nipplejs.create({
           zone: moveContainer,
           mode: 'dynamic',
           color: 'white',
-          size: isLandscape ? 80 : 100,
-          restOpacity: 0,
+          size: 120,
+          restOpacity: 0.5,
           threshold: 0.1,
           multitouch: true,
           maxNumberOfNipples: 1
@@ -115,31 +151,7 @@ export default function App() {
         joystickRef.current = null;
       }
     };
-  }, [gameState, isMobile, isLandscape]);
-
-  const [hudData, setHudData] = useState({
-    score: 0,
-    team: 'blue',
-    holding: false,
-    canPickUp: false,
-    isOut: false,
-    isAimingAtEnemy: false,
-    winner: null as string | null,
-    roundWinner: null as string | null,
-    stamina: 100,
-    chargeLevel: 0,
-    isBlocking: false,
-    timer: 180,
-    bluePlayersLeft: 4,
-    redPlayersLeft: 4,
-    blueWins: 0,
-    redWins: 0,
-    matchState: 'playing' as 'warmup' | 'playing' | 'finished',
-    killFeed: [] as any[],
-    roundStartTimestamp: 0,
-    scoreboard: null as any[] | null,
-    playAgainVotes: [] as string[] | null
-  });
+  }, [gameState, isMobile, isLandscape, hudData.isOut]);
 
   useEffect(() => {
     console.log("HUD Data Winner Changed:", hudData.winner);
@@ -244,6 +256,7 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('polyDodge_sensitivity', sensitivity.toString());
   }, [sensitivity]);
+
   const [showInstructions, setShowInstructions] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCustomization, setShowCustomization] = useState(false);
@@ -602,7 +615,15 @@ export default function App() {
   };
 
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden font-sans text-white select-none">
+    <div className="fixed inset-0 w-[100dvw] h-[100dvh] bg-black overflow-hidden font-sans text-white select-none">
+      {/* Mobile Landscape Enforcer */}
+      {isMobile && !isLandscape && (
+        <div className="fixed inset-0 z-[9999] bg-black flex flex-col items-center justify-center p-8 text-center">
+          <Smartphone className="w-16 h-16 text-emerald-500 mb-4 animate-spin-slow" />
+          <h2 className="text-2xl font-black text-white uppercase tracking-widest mb-2">Rotate Device</h2>
+          <p className="text-white/40 font-mono text-sm">Please rotate your device to landscape mode for the best experience.</p>
+        </div>
+      )}
       <div ref={containerRef} className="absolute inset-0 w-full h-full" />
 
       {/* Crosshair */}
@@ -625,7 +646,7 @@ export default function App() {
         {gameState === 'playing' && (
           <>
             {/* Chat UI */}
-            <div className={`absolute bottom-24 left-6 z-[100] w-full max-w-[300px] pointer-events-none flex flex-col gap-2 ${isMobile ? (isLandscape ? 'scale-[0.4] origin-bottom-left !bottom-2 !left-2' : 'scale-75 origin-bottom-left !bottom-20 !left-4') : ''}`}>
+            <div className={`absolute bottom-24 left-6 z-[100] w-full max-w-[300px] pointer-events-none flex flex-col gap-2 ${isMobile ? (isLandscape ? 'scale-75 origin-bottom-left !bottom-4 !left-4' : 'scale-75 origin-bottom-left !bottom-20 !left-4') : ''}`}>
               <div className="flex-1 overflow-y-auto max-h-[200px] flex flex-col gap-1 pointer-events-none custom-scrollbar">
                 {chatMessages.map(msg => (
                   <motion.div 
@@ -713,15 +734,7 @@ export default function App() {
               </div>
             )}
 
-            {hudData.isOut && isMobile && (
-              <div 
-                className="absolute inset-0 z-20 pointer-events-auto"
-                onTouchStart={handleLookTouchStart}
-                onTouchMove={handleLookTouchMove}
-                onTouchEnd={handleLookTouchEnd}
-                onTouchCancel={handleLookTouchEnd}
-              />
-            )}
+
 
             {hudData.isOut && (
               <div className={`absolute left-1/2 -translate-x-1/2 z-30 text-center ${isMobile && isLandscape ? 'bottom-8 scale-75 origin-bottom' : 'bottom-32'}`}>
@@ -760,7 +773,7 @@ export default function App() {
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className={`absolute inset-0 pointer-events-none p-4 md:p-6 flex flex-col justify-between ${isMobile ? (isLandscape ? 'scale-[0.45] origin-top' : 'scale-[0.85] origin-center') : ''}`}
+              className={`absolute inset-0 pointer-events-none p-4 md:p-6 flex flex-col justify-between ${isMobile ? (isLandscape ? 'scale-90 origin-top' : 'scale-[0.85] origin-center') : ''}`}
             >
             <div className={`flex justify-between items-start w-full ${isMobile && !isLandscape ? 'flex-col items-center gap-2' : ''}`}>
               {/* Left: Empty now (removed Active/Eliminated) */}
@@ -845,61 +858,72 @@ export default function App() {
             </div>
 
             {/* Mobile Controls */}
-            {isMobile && !hudData.isOut && (
+            {isMobile && (
               <>
-                {/* Look Surface (Mobile only) - covers whole screen but lower z-index than buttons */}
-                <div 
-                  className="absolute inset-0 z-40 pointer-events-auto"
-                  onTouchStart={handleLookTouchStart}
-                  onTouchMove={handleLookTouchMove}
-                  onTouchEnd={handleLookTouchEnd}
-                  onTouchCancel={handleLookTouchEnd}
-                />
-                
                 <div className="absolute inset-0 pointer-events-none z-50">
-                  <div id="joystick-move" className="absolute top-0 bottom-0 left-0 w-1/2 pointer-events-auto" />
+                  {/* Left Stick Zone (Movement) - Dynamic */}
+                  {!hudData.isOut && (
+                    <div ref={joystickMoveContainerRef} className="absolute top-0 bottom-0 left-0 w-1/2 pointer-events-auto touch-none" />
+                  )}
                   
-                  {/* Action Buttons */}
-                  <div className={`absolute bottom-32 right-8 flex flex-col gap-4 pointer-events-auto items-end ${isLandscape ? '!bottom-4 !right-12 scale-[0.6] origin-bottom-right' : ''}`}>
-                  <button 
-                    onClick={() => setShowEmoteWheel(true)}
-                    className="w-14 h-14 rounded-full bg-white/5 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all shadow-xl"
-                  >
-                    <span className="text-2xl">💬</span>
-                  </button>
-                  <button 
-                    onTouchStart={() => gameRef.current?.setMobileAction('throw', true)}
-                    onTouchEnd={() => gameRef.current?.setMobileAction('throw', false)}
-                    className="w-24 h-24 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center active:bg-white/40 active:scale-90 transition-all shadow-2xl"
-                  >
-                    <Target className="w-12 h-12" />
-                  </button>
-                  <div className="flex gap-6">
+                  {/* Right Touch Look Zone - Reverted to old method */}
+                  <div 
+                    className={`absolute top-0 bottom-0 right-0 ${hudData.isOut ? 'w-full' : 'w-1/2'} pointer-events-auto touch-none`}
+                    onTouchStart={handleLookTouchStart}
+                    onTouchMove={handleLookTouchMove}
+                    onTouchEnd={handleLookTouchEnd}
+                    onTouchCancel={handleLookTouchEnd}
+                  />
+                  
+                  {/* Action Buttons - Bottom Right (Thumb Arc) */}
+                  {!hudData.isOut && (
+                    <div className={`absolute bottom-8 right-8 flex flex-col gap-4 pointer-events-auto items-end ${isLandscape ? '' : ''}`}>
+                      {/* Throw Button (Main Action) */}
+                      <button 
+                        onTouchStart={() => gameRef.current?.setMobileAction('throw', true)}
+                        onTouchEnd={() => gameRef.current?.setMobileAction('throw', false)}
+                        className="w-24 h-24 rounded-full bg-red-500/20 backdrop-blur-md border border-red-500/30 flex items-center justify-center active:bg-red-500/50 active:scale-95 transition-all shadow-2xl group mb-2 mr-2"
+                      >
+                        <Target className="w-10 h-10 text-red-400 group-active:text-white" />
+                      </button>
+                      
+                      {/* Block Button (Secondary Action) */}
+                      <button 
+                        onTouchStart={() => gameRef.current?.setMobileAction('block', true)}
+                        onTouchEnd={() => gameRef.current?.setMobileAction('block', false)}
+                        className="absolute bottom-0 right-28 w-16 h-16 rounded-full bg-blue-500/20 backdrop-blur-md border border-blue-500/30 flex items-center justify-center active:bg-blue-500/50 active:scale-95 transition-all shadow-xl group"
+                      >
+                        <Shield className="w-6 h-6 text-blue-400 group-active:text-white" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Utility Buttons - Top Left */}
+                  <div className="absolute top-4 left-4 pointer-events-auto flex gap-4">
                     <button 
-                      onTouchStart={() => gameRef.current?.setMobileAction('block', true)}
-                      onTouchEnd={() => gameRef.current?.setMobileAction('block', false)}
-                      className="w-20 h-20 rounded-full bg-blue-500/20 backdrop-blur-md border border-blue-500/30 flex items-center justify-center active:bg-blue-500/50 active:scale-90 transition-all shadow-xl"
+                      onClick={() => setShowInGameMenu(true)}
+                      className="w-10 h-10 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all"
                     >
-                      <Shield className="w-10 h-10 text-blue-400" />
+                      <div className="flex gap-1">
+                        <div className="w-1 h-3 bg-white rounded-full" />
+                        <div className="w-1 h-3 bg-white rounded-full" />
+                      </div>
                     </button>
+                    
+                    {!hudData.isOut && (
+                      <button 
+                        onClick={() => setShowEmoteWheel(true)}
+                        className="w-10 h-10 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all"
+                      >
+                        <span className="text-lg">💬</span>
+                      </button>
+                    )}
                   </div>
                 </div>
+              </>
+            )}
 
-                {/* Mobile Pause Button */}
-                <div className={`absolute top-4 left-4 pointer-events-auto ${isLandscape ? 'scale-[0.6] origin-top-left' : ''}`}>
-                  <button 
-                    onClick={() => setShowInGameMenu(true)}
-                    className="w-10 h-10 rounded-xl bg-black/40 backdrop-blur-md border border-white/10 flex items-center justify-center active:bg-white/20 active:scale-90 transition-all"
-                  >
-                    <div className="flex gap-1">
-                      <div className="w-1 h-4 bg-white rounded-full" />
-                      <div className="w-1 h-4 bg-white rounded-full" />
-                    </div>
-                  </button>
-                </div>
-              </div>
-            </>
-          )}
+            {/* Hold Time Warning Removed */}
 
             {/* Bottom HUD: Stamina & Charge */}
             <div className={`flex justify-center items-end pb-6 gap-6 ${isMobile ? (isLandscape ? 'scale-[0.45] origin-bottom opacity-60 pointer-events-none' : 'scale-75 origin-bottom opacity-50 pointer-events-none') : ''}`}>
@@ -1013,7 +1037,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={`absolute inset-0 z-50 flex bg-zinc-950 overflow-y-auto ${isMobile && !isLandscape ? 'flex-col' : 'flex-row'} ${isMobile ? (isLandscape ? 'scale-[0.55] origin-center' : 'scale-[0.9] md:scale-100 origin-center') : ''}`}
+            className={`absolute inset-0 z-50 flex bg-zinc-950 overflow-y-auto ${isMobile && !isLandscape ? 'flex-col' : 'flex-row'}`}
           >
             {/* Split Layout: Left Side (Branding & Profile) */}
             <div className={`relative flex-1 flex flex-col justify-between ${isMobile && isLandscape ? 'p-4' : 'p-6 md:p-16'} border-r border-white/5 ${isMobile && !isLandscape ? 'min-h-screen' : ''}`}>
@@ -1874,7 +1898,7 @@ export default function App() {
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8'} border-t border-white/5 bg-zinc-900 flex justify-center`}>
                 <button 
                   onClick={() => setShowInstructions(false)}
-                  className={`${isMobile && isLandscape ? 'px-8 py-3' : 'px-16 py-5'} bg-white text-black rounded-2xl font-black uppercase tracking-[0.4em] hover:bg-amber-500 transition-all active:scale-95 shadow-2xl ${isMobile && isLandscape ? 'text-[10px]' : ''}`}
+                  className={`${isMobile && isLandscape ? 'px-8 py-3' : 'px-16 py-5'} bg-white text-black rounded-2xl font-black uppercase tracking-[0.4em] hover:bg-amber-500 transition-all active:scale-95 shadow-2xl ${isMobile && isLandscape ? 'text-xs' : ''}`}
                 >
                   Understood
                 </button>
