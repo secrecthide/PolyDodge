@@ -1468,12 +1468,12 @@ export class Game {
     this.velocity.x -= this.velocity.x * friction * delta;
     this.velocity.z -= this.velocity.z * friction * delta;
 
-    this.direction.z = Number(this.moveForward) - Number(this.moveBackward);
+    this.direction.z = Number(this.moveBackward) - Number(this.moveForward);
     this.direction.x = Number(this.moveRight) - Number(this.moveLeft);
     
     if (this.isMobile) {
       this.direction.x = this.mobileMove.x;
-      this.direction.z = this.mobileMove.y; 
+      this.direction.z = -this.mobileMove.y; 
     }
 
     if (this.direction.lengthSq() > 0.001) {

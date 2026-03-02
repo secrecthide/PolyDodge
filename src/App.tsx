@@ -238,7 +238,7 @@ export default function App() {
 
   const [unlockedItems, setUnlockedItems] = useState<string[]>(() => {
     const saved = localStorage.getItem('polyDodge_unlocked');
-    return saved ? JSON.parse(saved) : ['Yellow'];
+    return saved ? JSON.parse(saved) : ['Yellow', 'Standard'];
   });
 
   useEffect(() => {
@@ -247,14 +247,24 @@ export default function App() {
 
   const buyItem = (itemId: string, price: number) => {
     if (unlockedItems.includes(itemId)) {
-      setSelectedBall(itemId);
-      gameRef.current?.applyCustomization('ball', itemId);
+      if (balls.includes(itemId as any)) {
+        setSelectedBall(itemId as any);
+        gameRef.current?.applyCustomization('ball', itemId);
+      } else {
+        setSelectedTrail(itemId as any);
+        gameRef.current?.applyCustomization('trail', itemId);
+      }
     } else {
       if (playerProfile.coins >= price) {
         setPlayerProfile((prev: any) => ({ ...prev, coins: prev.coins - price }));
         setUnlockedItems(prev => [...prev, itemId]);
-        setSelectedBall(itemId);
-        gameRef.current?.applyCustomization('ball', itemId);
+        if (balls.includes(itemId as any)) {
+          setSelectedBall(itemId as any);
+          gameRef.current?.applyCustomization('ball', itemId);
+        } else {
+          setSelectedTrail(itemId as any);
+          gameRef.current?.applyCustomization('trail', itemId);
+        }
       } else {
         alert('Insufficient Credits!');
       }
@@ -278,8 +288,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [showCustomization, setShowCustomization] = useState(false);
   const [customizationTab, setCustomizationTab] = useState<'Balls' | 'Trails'>('Balls');
-  const [balls] = useState(['Yellow', 'Neon Blue', 'Neon Red', 'Rainbow', 'Void', 'Plasma', 'Galaxy', 'Magma', 'Emerald']);
-  const [trails] = useState(['Standard', 'Fire', 'Ice', 'Lightning']);
+  const [balls] = useState(['Yellow', 'Neon Blue', 'Neon Red', 'Rainbow', 'Void', 'Plasma', 'Galaxy', 'Magma', 'Emerald', 'Gold', 'Diamond', 'Ruby']);
+  const [trails] = useState(['Standard', 'Fire', 'Ice', 'Lightning', 'Rainbow', 'Shadow', 'Ghost']);
   const [selectedBall, setSelectedBall] = useState(() => {
     return localStorage.getItem('polyDodge_selectedBall') || 'Yellow';
   });
@@ -318,7 +328,6 @@ export default function App() {
 
   const [showInGameMenu, setShowInGameMenu] = useState(false);
   const [showGameEnd, setShowGameEnd] = useState(false);
-  const [showEmoteWheel, setShowEmoteWheel] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
 
   // Use a ref for the HUD update callback to avoid stale closures
@@ -377,9 +386,6 @@ export default function App() {
               document.exitPointerLock();
             }
           }
-        }
-        if (e.code === 'KeyV' || e.code === 'KeyB') {
-          setShowEmoteWheel(prev => !prev);
         }
         if (hudData.isOut) {
           if (e.code === 'ArrowRight' || e.code === 'KeyD') gameRef.current?.cycleSpectator(1);
@@ -1064,59 +1070,7 @@ export default function App() {
                 </div>
               </div>
             </div>
-            {/* Emote Wheel Overlay */}
-            <AnimatePresence>
-              {showEmoteWheel && (
-                <motion.div 
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 z-[100] flex items-center justify-center bg-black/40 pointer-events-auto"
-                  onClick={() => setShowEmoteWheel(false)}
-                >
-                  <motion.div 
-                    initial={{ scale: 0.9, y: 20 }}
-                    animate={{ scale: 1, y: 0 }}
-                    className={`relative w-80 h-80 flex items-center justify-center ${isMobile ? 'scale-75' : ''}`}
-                    onClick={e => e.stopPropagation()}
-                  >
-                    {/* Radial Wheel */}
-                    <div className="absolute inset-0 rounded-full border-4 border-white/5 bg-black/20 backdrop-blur-sm" />
-                    <div className="relative z-10 text-center">
-                       <div className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-1">Emote</div>
-                       <div className="text-white/20 text-xs">Select One</div>
-                    </div>
-
-                    {emotes.map((emote, i) => {
-                      const angle = (i / emotes.length) * Math.PI * 2 - Math.PI / 2;
-                      const x = Math.cos(angle) * 110;
-                      const y = Math.sin(angle) * 110;
-                      return (
-                        <motion.button 
-                          key={emote}
-                          initial={{ opacity: 0, scale: 0 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          transition={{ delay: i * 0.05 }}
-                          onClick={() => {
-                            sendEmote(emote);
-                            setShowEmoteWheel(false);
-                          }}
-                          style={{ 
-                            position: 'absolute',
-                            left: `calc(50% + ${x}px)`,
-                            top: `calc(50% + ${y}px)`,
-                            transform: 'translate(-50%, -50%)'
-                          }}
-                          className="w-16 h-16 bg-zinc-900 hover:bg-emerald-500 hover:text-black border border-white/10 rounded-full font-bold text-[10px] transition-all active:scale-95 flex items-center justify-center p-2 text-center shadow-xl"
-                        >
-                          {emote}
-                        </motion.button>
-                      );
-                    })}
-                  </motion.div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {/* Emote Wheel Removed */}
           </motion.div>
         </>
       )}
@@ -1522,7 +1476,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col h-[85vh] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${isMobile ? (isLandscape ? 'scale-[0.5] md:scale-100' : 'scale-[0.8] md:scale-100') : ''}`}
+              className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-[1.5rem] md:rounded-[2.5rem] overflow-hidden flex flex-col h-[95vh] md:h-[85vh] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${isMobile ? (isLandscape ? 'scale-[0.6] origin-center' : 'scale-[0.9] origin-center') : ''}`}
             >
               {/* Header */}
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8 md:p-12'} border-b border-white/5 flex items-end justify-between bg-gradient-to-b from-white/5 to-transparent`}>
@@ -1566,7 +1520,7 @@ export default function App() {
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 md:p-12 custom-scrollbar bg-zinc-950/20">
-                <div className={`grid ${isMobile && isLandscape ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-2 lg:grid-cols-3'} gap-3 md:gap-6`}>
+                <div className={`grid ${isMobile && !isLandscape ? 'grid-cols-2' : (isMobile && isLandscape ? 'grid-cols-4' : 'grid-cols-3')} gap-2 md:gap-6`}>
                   {customizationTab === 'Balls' && balls.map(ball => {
                     const isUnlocked = unlockedItems.includes(ball);
                     const price = ball === 'Yellow' ? 0 : 
@@ -1576,7 +1530,10 @@ export default function App() {
                                  ball === 'Void' ? 2500 : 
                                  ball === 'Plasma' ? 3000 :
                                  ball === 'Galaxy' ? 4000 :
-                                 ball === 'Magma' ? 4000 : 5000;
+                                 ball === 'Magma' ? 4000 : 
+                                 ball === 'Emerald' ? 4000 :
+                                 ball === 'Gold' ? 6000 :
+                                 ball === 'Diamond' ? 8000 : 10000;
                     const isSelected = selectedBall === ball;
 
                     return (
@@ -1584,13 +1541,13 @@ export default function App() {
                         key={ball}
                         onClick={() => {
                           if (isUnlocked) {
-                            setSelectedBall(ball);
+                            setSelectedBall(ball as any);
                             gameRef.current?.applyCustomization('ball', ball);
                           } else if (playerProfile.coins >= price) {
                             buyItem(ball, price);
                           }
                         }}
-                        className={`group relative p-3 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all flex flex-col gap-3 md:gap-6 ${
+                        className={`group relative p-2 md:p-6 rounded-[1rem] md:rounded-[2rem] border transition-all flex flex-col gap-2 md:gap-6 ${
                           isSelected 
                             ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.1)]' 
                             : isUnlocked 
@@ -1599,7 +1556,7 @@ export default function App() {
                         }`}
                       >
                         <div className="flex justify-between items-start">
-                          <div className={`w-12 h-12 md:w-20 md:h-20 rounded-full border-2 md:border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${
+                          <div className={`w-10 h-10 md:w-20 md:h-20 rounded-full border-2 md:border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${
                             ball === 'Yellow' ? 'bg-yellow-400 border-yellow-200' :
                             ball === 'Neon Blue' ? 'bg-cyan-400 border-cyan-200 shadow-[0_0_20px_rgba(34,211,238,0.6)]' :
                             ball === 'Neon Red' ? 'bg-red-400 border-red-200 shadow-[0_0_20px_rgba(248,113,113,0.6)]' :
@@ -1608,26 +1565,29 @@ export default function App() {
                             ball === 'Galaxy' ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_25px_rgba(99,102,241,0.5)]' :
                             ball === 'Magma' ? 'bg-orange-600 border-orange-400 shadow-[0_0_25px_rgba(249,115,22,0.5)]' :
                             ball === 'Emerald' ? 'bg-emerald-600 border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.5)]' :
+                            ball === 'Gold' ? 'bg-yellow-600 border-yellow-300 shadow-[0_0_25px_rgba(234,179,8,0.5)]' :
+                            ball === 'Diamond' ? 'bg-sky-200 border-white shadow-[0_0_25px_rgba(255,255,255,0.8)]' :
+                            ball === 'Ruby' ? 'bg-red-700 border-red-400 shadow-[0_0_25px_rgba(185,28,28,0.5)]' :
                             'bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]'
                           }`}>
-                            {!isUnlocked && <Lock className="w-4 h-4 md:w-8 md:h-8 text-white/40 absolute" />}
-                            <div className="w-6 h-6 md:w-10 md:h-10 rounded-full bg-white/10 border border-white/20 blur-[1px]" />
+                            {!isUnlocked && <Lock className="w-3 h-3 md:w-8 md:h-8 text-white/40 absolute" />}
+                            <div className="w-5 h-5 md:w-10 md:h-10 rounded-full bg-white/10 border border-white/20 blur-[1px]" />
                           </div>
                           {isSelected ? (
-                            <div className="bg-emerald-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Equipped</div>
+                            <div className="bg-emerald-500 text-black text-[6px] md:text-[10px] font-black px-1.5 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Equipped</div>
                           ) : !isUnlocked ? (
-                            <div className="flex items-center gap-1.5 md:gap-2 bg-amber-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">
-                              <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-amber-700/30" />
+                            <div className="flex items-center gap-1 md:gap-2 bg-amber-500 text-black text-[6px] md:text-[10px] font-black px-1.5 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">
+                              <div className="w-1 h-1 md:w-2 md:h-2 rounded-full bg-amber-700/30" />
                               {price}
                             </div>
                           ) : (
-                            <div className="bg-white/10 text-white/40 text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Unlocked</div>
+                            <div className="bg-white/10 text-white/40 text-[6px] md:text-[10px] font-black px-1.5 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Unlocked</div>
                           )}
                         </div>
                         
                         <div className="text-left">
-                          <div className="text-sm md:text-2xl font-black text-white italic uppercase tracking-tighter mb-0.5 md:mb-1">{ball}</div>
-                          <div className="text-[7px] md:text-[10px] font-bold text-white/30 uppercase tracking-widest">
+                          <div className="text-xs md:text-2xl font-black text-white italic uppercase tracking-tighter mb-0.5 md:mb-1">{ball}</div>
+                          <div className="text-[6px] md:text-[10px] font-bold text-white/30 uppercase tracking-widest">
                             {isUnlocked ? 'Standard Issue' : 'Restricted'}
                           </div>
                         </div>
@@ -1637,7 +1597,12 @@ export default function App() {
 
                   {customizationTab === 'Trails' && trails.map(trail => {
                     const isUnlocked = unlockedItems.includes(trail);
-                    const price = trail === 'Standard' ? 0 : 1000;
+                    const price = trail === 'Standard' ? 0 : 
+                                 trail === 'Fire' ? 1000 : 
+                                 trail === 'Ice' ? 1000 : 
+                                 trail === 'Lightning' ? 1500 : 
+                                 trail === 'Rainbow' ? 2500 : 
+                                 trail === 'Shadow' ? 3500 : 5000;
                     const isSelected = selectedTrail === trail;
 
                     return (
@@ -1645,13 +1610,13 @@ export default function App() {
                         key={trail}
                         onClick={() => {
                           if (isUnlocked) {
-                            setSelectedTrail(trail);
+                            setSelectedTrail(trail as any);
                             gameRef.current?.applyCustomization('trail', trail);
                           } else if (playerProfile.coins >= price) {
                             buyItem(trail, price);
                           }
                         }}
-                        className={`group relative p-3 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all flex flex-col gap-3 md:gap-6 ${
+                        className={`group relative p-2 md:p-6 rounded-[1rem] md:rounded-[2rem] border transition-all flex flex-col gap-2 md:gap-6 ${
                           isSelected 
                             ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.1)]' 
                             : isUnlocked 
@@ -1660,38 +1625,44 @@ export default function App() {
                         }`}
                       >
                         <div className="flex justify-between items-start">
-                          <div className={`w-12 h-12 md:w-20 md:h-20 rounded-full border-2 md:border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${
+                          <div className={`w-10 h-10 md:w-20 md:h-20 rounded-full border-2 md:border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${
                             trail === 'Standard' ? 'bg-white/20 border-white/40' :
                             trail === 'Fire' ? 'bg-orange-600 border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.6)]' :
                             trail === 'Ice' ? 'bg-blue-400 border-blue-200 shadow-[0_0_20px_rgba(96,165,250,0.6)]' :
-                            'bg-yellow-400 border-yellow-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]'
+                            trail === 'Lightning' ? 'bg-yellow-400 border-yellow-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]' :
+                            trail === 'Rainbow' ? 'bg-gradient-to-r from-red-500 via-green-500 to-blue-500 border-white shadow-[0_0_20px_rgba(255,255,255,0.4)]' :
+                            trail === 'Shadow' ? 'bg-zinc-900 border-zinc-700 shadow-[0_0_20px_rgba(0,0,0,0.8)]' :
+                            'bg-white/10 border-white/20 shadow-[0_0_20px_rgba(255,255,255,0.2)]'
                           }`}>
-                            {!isUnlocked && <Lock className="w-4 h-4 md:w-8 md:h-8 text-white/40 absolute" />}
-                            <div className="flex gap-1">
+                            {!isUnlocked && <Lock className="w-3 h-3 md:w-8 md:h-8 text-white/40 absolute" />}
+                            <div className="flex gap-0.5 md:gap-1">
                               {Array.from({ length: 3 }).map((_, i) => (
-                                <div key={i} className={`w-1 h-3 md:w-1.5 md:h-6 rounded-full ${
+                                <div key={i} className={`w-0.5 h-2 md:w-1.5 md:h-6 rounded-full ${
                                   trail === 'Standard' ? 'bg-white/40' : 
                                   trail === 'Fire' ? 'bg-orange-500' : 
-                                  trail === 'Ice' ? 'bg-blue-400' : 'bg-yellow-400'
+                                  trail === 'Ice' ? 'bg-blue-400' : 
+                                  trail === 'Lightning' ? 'bg-yellow-400' :
+                                  trail === 'Rainbow' ? 'bg-white' :
+                                  trail === 'Shadow' ? 'bg-black' : 'bg-white/20'
                                 }`} style={{ opacity: 1 - i * 0.3 }} />
                               ))}
                             </div>
                           </div>
                           {isSelected ? (
-                            <div className="bg-emerald-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Equipped</div>
+                            <div className="bg-emerald-500 text-black text-[6px] md:text-[10px] font-black px-1.5 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Equipped</div>
                           ) : !isUnlocked ? (
-                            <div className="flex items-center gap-1.5 md:gap-2 bg-amber-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">
-                              <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-amber-700/30" />
+                            <div className="flex items-center gap-1 md:gap-2 bg-amber-500 text-black text-[6px] md:text-[10px] font-black px-1.5 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">
+                              <div className="w-1 h-1 md:w-2 md:h-2 rounded-full bg-amber-700/30" />
                               {price}
                             </div>
                           ) : (
-                            <div className="bg-white/10 text-white/40 text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Unlocked</div>
+                            <div className="bg-white/10 text-white/40 text-[6px] md:text-[10px] font-black px-1.5 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Unlocked</div>
                           )}
                         </div>
                         
                         <div className="text-left">
-                          <div className="text-sm md:text-2xl font-black text-white italic uppercase tracking-tighter mb-0.5 md:mb-1">{trail}</div>
-                          <div className="text-[7px] md:text-[10px] font-bold text-white/30 uppercase tracking-widest">
+                          <div className="text-xs md:text-2xl font-black text-white italic uppercase tracking-tighter mb-0.5 md:mb-1">{trail}</div>
+                          <div className="text-[6px] md:text-[10px] font-bold text-white/30 uppercase tracking-widest">
                             {isUnlocked ? 'Standard Issue' : 'Restricted'}
                           </div>
                         </div>
