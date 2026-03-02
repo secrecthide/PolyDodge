@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
 import { PlayerData, BallData, createLowPolyArena, createPlayerMesh, createBallMesh, ARENA_SIZE } from './constants';
 import { BotAI, IGameContext } from './BotAI';
 import { Socket } from 'socket.io-client';
@@ -10,7 +9,6 @@ export class Game {
   private scene: THREE.Scene;
   private camera: THREE.PerspectiveCamera;
   private renderer: THREE.WebGLRenderer;
-  private controls: PointerLockControls;
   
   private players: Map<string, { data: PlayerData; mesh: THREE.Group }> = new Map();
   private balls: Map<number, { data: BallData; mesh: THREE.Mesh }> = new Map();
@@ -53,6 +51,7 @@ export class Game {
   private sensitivity = 1.0;
 
   private currentBallColor: string = 'Yellow';
+  private currentTrail: string = 'Standard';
   private emoteSprites: Map<string, THREE.Sprite> = new Map();
 
   private bots: Map<string, BotAI> = new Map();
@@ -87,21 +86,40 @@ export class Game {
     this.renderer.shadowMap.enabled = true;
     container.appendChild(this.renderer.domElement);
 
-    this.controls = new PointerLockControls(this.camera, this.renderer.domElement);
-    
-    // Re-lock on click
+    // Custom Pointer Lock Logic for better sensitivity control
     this.renderer.domElement.addEventListener('click', () => {
-      if (!this.controls.isLocked && !this.isMobile && this.gameActive) {
-        this.controls.lock();
+      if (document.pointerLockElement !== this.renderer.domElement && !this.isMobile && this.gameActive) {
+        this.renderer.domElement.requestPointerLock();
       }
     });
 
-    this.controls.addEventListener('lock', () => {
-      if (this.onLockChange) this.onLockChange(true);
-    });
-    this.controls.addEventListener('unlock', () => {
-      if (this.onLockChange) this.onLockChange(false);
-    });
+    const onPointerLockChange = () => {
+      const locked = document.pointerLockElement === this.renderer.domElement;
+      if (this.onLockChange) this.onLockChange(locked);
+    };
+
+    document.addEventListener('pointerlockchange', onPointerLockChange);
+
+    const onMouseMove = (event: MouseEvent) => {
+      if (document.pointerLockElement === this.renderer.domElement && this.gameActive && !this.isMobile) {
+        const myPlayer = this.myId ? this.players.get(this.myId) : null;
+        if (myPlayer && !myPlayer.data.isOut) {
+          const movementX = event.movementX || 0;
+          const movementY = event.movementY || 0;
+          
+          // Apply sensitivity
+          const lookSpeed = 0.002 * this.sensitivity;
+          this.camera.rotation.y -= movementX * lookSpeed;
+          this.camera.rotation.x -= movementY * lookSpeed;
+          
+          // Clamp pitch to prevent flipping
+          const maxPitch = Math.PI / 2 - 0.05;
+          this.camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, this.camera.rotation.x));
+        }
+      }
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
     
     this.setupLights();
     createLowPolyArena(this.scene);
@@ -133,6 +151,9 @@ export class Game {
   private setupTrailSystem() {
     this.trailGeometry = new THREE.SphereGeometry(0.15, 8, 8);
     this.trailMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.6 });
+    
+    // Apply current customization
+    this.applyCustomization('trail', this.currentTrail);
   }
 
   private createTrail(ballId: number) {
@@ -191,9 +212,6 @@ export class Game {
 
   public setSensitivity(value: number) {
     this.sensitivity = value;
-    if (this.controls) {
-      this.controls.pointerSpeed = value;
-    }
   }
 
   public cycleSpectator(direction: number) {
@@ -208,7 +226,7 @@ export class Game {
     this.spectatingId = teammates[currentIndex][0];
   }
 
-  public applyCustomization(type: 'ball' | 'emote', value: string) {
+  public applyCustomization(type: 'ball' | 'trail', value: string) {
     if (type === 'ball') {
        this.currentBallColor = value;
        if (this.fpBall && this.fpBall.material instanceof THREE.MeshStandardMaterial) {
@@ -218,12 +236,26 @@ export class Game {
             'Neon Red': 0xff0000,
             'Rainbow': 0xffffff,
             'Void': 0x4a044e,
-            'Plasma': 0xec4899
+            'Plasma': 0xec4899,
+            'Galaxy': 0x6366f1,
+            'Magma': 0xf97316,
+            'Emerald': 0x10b981
           };
           const color = colors[value] || 0xffff00;
           this.fpBall.material.color.setHex(color);
           this.fpBall.material.emissive.setHex(color);
        }
+    } else if (type === 'trail') {
+      this.currentTrail = value;
+      const trailColors: Record<string, number> = {
+        'Fire': 0xff4400,
+        'Ice': 0x00ffff,
+        'Lightning': 0xffff00,
+        'Standard': 0xffffff
+      };
+      if (this.trailMaterial) {
+        this.trailMaterial.color.setHex(trailColors[value] || 0xffffff);
+      }
     }
   }
 
@@ -289,6 +321,9 @@ export class Game {
     this.fpBall.visible = false;
     this.camera.add(this.fpBall);
     this.scene.add(this.camera); // Ensure camera is in scene to see children
+    
+    // Apply current customization
+    this.applyCustomization('ball', this.currentBallColor);
   }
 
   private setupLights() {
@@ -354,7 +389,7 @@ export class Game {
         return;
       }
 
-      if (this.controls.isLocked) {
+      if (document.pointerLockElement === this.renderer.domElement) {
         if (e.button === 0) this.handleMouseDown();
         if (e.button === 2) {
           const myPlayer = this.myId ? this.players.get(this.myId)?.data : null;
@@ -365,7 +400,7 @@ export class Game {
       }
     });
     document.addEventListener('mouseup', (e) => {
-      if (this.controls.isLocked) {
+      if (document.pointerLockElement === this.renderer.domElement) {
         if (e.button === 0) this.handleMouseUp();
         if (e.button === 2) this.isBlocking = false;
       }
@@ -566,6 +601,8 @@ export class Game {
 
   private roundStartTimestamp: number = 0;
 
+  private serverTimeOffset: number = 0;
+
   public startOnline(room: any, socket: Socket) {
     this.socket = socket;
     this.warmup();
@@ -574,6 +611,12 @@ export class Game {
     this.roundTime = 180;
     this.lastTimeUpdate = Date.now();
     this.spectatingId = null;
+
+    // Calculate time offset for synchronized countdown
+    if (room.serverTime) {
+      this.serverTimeOffset = Date.now() - room.serverTime;
+    }
+
     this.roundStartTimestamp = room.roundStartTimestamp || 0;
 
     this.onUpdateHUD({ 
@@ -584,7 +627,8 @@ export class Game {
       isOut: false,
       bluePlayersLeft: 4,
       redPlayersLeft: 4,
-      roundStartTimestamp: this.roundStartTimestamp
+      roundStartTimestamp: this.roundStartTimestamp,
+      serverTimeOffset: this.serverTimeOffset
     });
     
     // Clear existing
@@ -1230,16 +1274,6 @@ export class Game {
     this.renderer.setSize(width, height);
   }
 
-  public lock() {
-    if (this.gameActive) {
-      this.controls.lock();
-    }
-  }
-
-  public unlock() {
-    this.controls.unlock();
-  }
-
   private animate() {
     requestAnimationFrame(this.animate.bind(this));
     const now = performance.now();
@@ -1248,7 +1282,7 @@ export class Game {
 
     const myPlayer = this.myId ? this.players.get(this.myId) : null;
     
-    if ((this.controls.isLocked || this.isMobile) && myPlayer && !myPlayer.data.isOut) {
+    if ((document.pointerLockElement === this.renderer.domElement || this.isMobile) && myPlayer && !myPlayer.data.isOut) {
       this.updateMovement(delta);
     } else if (myPlayer && myPlayer.data.isOut) {
       this.updateSpectating();
@@ -1336,13 +1370,26 @@ export class Game {
   }
 
   public rotateCamera(dx: number, dy: number) {
+    // Mobile/Touch rotation
     const lookSpeed = 0.002 * this.sensitivity;
     this.camera.rotation.y -= dx * lookSpeed;
     this.camera.rotation.x -= dy * lookSpeed;
     
-    // Clamp pitch to prevent flipping
-    const maxPitch = Math.PI / 2 - 0.01;
+    // Clamp pitch to prevent flipping (Vertical rotation)
+    const maxPitch = Math.PI / 2 - 0.05;
     this.camera.rotation.x = Math.max(-maxPitch, Math.min(maxPitch, this.camera.rotation.x));
+  }
+
+  public lock() {
+    if (!this.isMobile) {
+      this.renderer.domElement.requestPointerLock();
+    }
+  }
+
+  public unlock() {
+    if (document.pointerLockElement === this.renderer.domElement) {
+      document.exitPointerLock();
+    }
   }
 
   public setMobileAction(action: 'throw' | 'block', active: boolean) {
@@ -1358,8 +1405,9 @@ export class Game {
   }
 
   private updateMovement(delta: number) {
-    // Check countdown
-    if (this.roundStartTimestamp && Date.now() < this.roundStartTimestamp) {
+    // Check countdown with time sync
+    const now = Date.now() - this.serverTimeOffset;
+    if (this.roundStartTimestamp && now < this.roundStartTimestamp) {
       return;
     }
 
@@ -1435,8 +1483,8 @@ export class Game {
     if (this.moveForward || this.moveBackward || (this.isMobile && Math.abs(this.mobileMove.y) > 0.1)) this.velocity.z -= this.direction.z * acceleration * delta;
     if (this.moveLeft || this.moveRight || (this.isMobile && Math.abs(this.mobileMove.x) > 0.1)) this.velocity.x -= this.direction.x * acceleration * delta;
 
-    this.controls.moveRight(-this.velocity.x * delta);
-    this.controls.moveForward(-this.velocity.z * delta);
+    this.camera.translateX(-this.velocity.x * delta);
+    this.camera.translateZ(-this.velocity.z * delta);
 
     // Force ground level to prevent flying
     this.camera.position.y = 1.6;

@@ -77,6 +77,18 @@ export default function App() {
     };
     checkMobile();
     window.addEventListener('resize', checkMobile);
+
+    // Request microphone permission early for voice chat
+    const requestMic = async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach(track => track.stop()); // Stop immediately, we just wanted permission
+      } catch (err) {
+        console.warn("Microphone permission denied or not available", err);
+      }
+    };
+    requestMic();
+
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
@@ -109,27 +121,28 @@ export default function App() {
   });
 
   useEffect(() => {
-    if (gameState === 'playing' && isMobile) {
-      // Initialize movement joystick (Left) - Dynamic Mode
-      const moveContainer = joystickMoveContainerRef.current;
-      if (moveContainer) {
-        // Clear any existing nipplejs instances in this container just in case
+    let manager: any = null;
+    
+    const initJoystick = () => {
+      if (gameState === 'playing' && isMobile && joystickMoveContainerRef.current) {
+        const moveContainer = joystickMoveContainerRef.current;
+        // Clear any existing nipplejs instances
         while (moveContainer.firstChild) {
           moveContainer.removeChild(moveContainer.firstChild);
         }
 
-        const manager = nipplejs.create({
+        manager = nipplejs.create({
           zone: moveContainer,
           mode: 'dynamic',
           color: 'white',
-          size: 120,
+          size: 100,
           restOpacity: 0.5,
           threshold: 0.1,
           multitouch: true,
           maxNumberOfNipples: 1
         });
 
-        manager.on('move', (evt, data) => {
+        manager.on('move', (evt: any, data: any) => {
           if (gameRef.current) {
             gameRef.current.setMobileMove(data.vector.x, data.vector.y);
           }
@@ -143,13 +156,17 @@ export default function App() {
 
         joystickRef.current = manager;
       }
-    }
+    };
+
+    // Small delay to ensure ref is attached
+    const timer = setTimeout(initJoystick, 100);
 
     return () => {
-      if (joystickRef.current) {
-        joystickRef.current.destroy();
-        joystickRef.current = null;
+      clearTimeout(timer);
+      if (manager) {
+        manager.destroy();
       }
+      joystickRef.current = null;
     };
   }, [gameState, isMobile, isLandscape, hudData.isOut]);
 
@@ -190,10 +207,10 @@ export default function App() {
     let interval: any;
     if (hudData.roundStartTimestamp > 0) {
       interval = setInterval(() => {
-        const remaining = Math.ceil((hudData.roundStartTimestamp - Date.now()) / 1000);
+        const now = Date.now() - (hudData as any).serverTimeOffset;
+        const remaining = Math.ceil((hudData.roundStartTimestamp - now) / 1000);
         if (remaining <= 0) {
           setCountdown(0);
-          // Don't clear timestamp here, let next update handle it or just ignore if <= 0
         } else {
           setCountdown(remaining);
         }
@@ -202,7 +219,7 @@ export default function App() {
       setCountdown(0);
     }
     return () => clearInterval(interval);
-  }, [hudData.roundStartTimestamp]);
+  }, [hudData.roundStartTimestamp, (hudData as any).serverTimeOffset]);
 
   // Profile & Customization State
   const [playerProfile, setPlayerProfile] = useState(() => {
@@ -260,21 +277,25 @@ export default function App() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showCustomization, setShowCustomization] = useState(false);
-  const [customizationTab, setCustomizationTab] = useState<'Balls' | 'Emotes'>('Balls');
+  const [customizationTab, setCustomizationTab] = useState<'Balls' | 'Trails'>('Balls');
+  const [balls] = useState(['Yellow', 'Neon Blue', 'Neon Red', 'Rainbow', 'Void', 'Plasma', 'Galaxy', 'Magma', 'Emerald']);
+  const [trails] = useState(['Standard', 'Fire', 'Ice', 'Lightning']);
   const [selectedBall, setSelectedBall] = useState(() => {
     return localStorage.getItem('polyDodge_selectedBall') || 'Yellow';
   });
-  const [selectedEmote, setSelectedEmote] = useState(() => {
-    return localStorage.getItem('polyDodge_selectedEmote') || 'GG';
+  const [selectedTrail, setSelectedTrail] = useState(() => {
+    return localStorage.getItem('polyDodge_selectedTrail') || 'Standard';
   });
 
   useEffect(() => {
     localStorage.setItem('polyDodge_selectedBall', selectedBall);
+    if (gameRef.current) gameRef.current.applyCustomization('ball', selectedBall);
   }, [selectedBall]);
 
   useEffect(() => {
-    localStorage.setItem('polyDodge_selectedEmote', selectedEmote);
-  }, [selectedEmote]);
+    localStorage.setItem('polyDodge_selectedTrail', selectedTrail);
+    if (gameRef.current) gameRef.current.applyCustomization('trail', selectedTrail);
+  }, [selectedTrail]);
 
   const [chatMessages, setChatMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState('');
@@ -292,7 +313,7 @@ export default function App() {
     localStorage.setItem('polyDodge_chatSettings', JSON.stringify(chatSettings));
   }, [chatSettings]);
 
-  const [peers, setPeers] = useState<Map<string, RTCPeerConnection>>(new Map());
+  const peersRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const localStream = useRef<MediaStream | null>(null);
 
   const [showInGameMenu, setShowInGameMenu] = useState(false);
@@ -327,7 +348,6 @@ export default function App() {
     };
   }, [gameState]);
 
-  const balls = ['Yellow', 'Neon Blue', 'Neon Red', 'Rainbow', 'Void', 'Plasma'];
   const emotes = ['Nice shot!', 'Dodge this!', 'GG', 'Oops!', 'Wait...', 'LOL', 'Unlucky'];
 
   const sendEmote = (emote: string) => {
@@ -439,26 +459,38 @@ export default function App() {
 
     newSocket.on('chat_message', (msg) => {
       if (chatSettings.mutedPlayers.includes(msg.senderId)) return;
-      setChatMessages(prev => [...prev, msg].slice(-50));
+      setChatMessages(prev => [...prev, { ...msg, timestamp: Date.now() }].slice(-50));
     });
 
     newSocket.on('voice_signal', async ({ senderId, signal }) => {
       if (!chatSettings.voiceEnabled || chatSettings.mutedPlayers.includes(senderId)) return;
       
-      let pc = peers.get(senderId);
+      let pc = peersRef.current.get(senderId);
       if (!pc) {
         pc = createPeer(senderId, newSocket);
       }
 
-      if (signal.type === 'offer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(signal));
-        const answer = await pc.createAnswer();
-        await pc.setLocalDescription(answer);
-        newSocket.emit('voice_signal', { targetId: senderId, signal: answer });
-      } else if (signal.type === 'answer') {
-        await pc.setRemoteDescription(new RTCSessionDescription(signal));
-      } else if (signal.candidate) {
-        await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+      try {
+        if (signal.type === 'offer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          newSocket.emit('voice_signal', { targetId: senderId, signal: answer });
+        } else if (signal.type === 'answer') {
+          await pc.setRemoteDescription(new RTCSessionDescription(signal));
+        } else if (signal.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(signal.candidate));
+        }
+      } catch (err) {
+        console.error("Error handling voice signal", err);
+      }
+    });
+
+    newSocket.on('player_left', ({ id }) => {
+      const pc = peersRef.current.get(id);
+      if (pc) {
+        pc.close();
+        peersRef.current.delete(id);
       }
     });
 
@@ -501,6 +533,12 @@ export default function App() {
 
     return () => {
       newSocket.disconnect();
+      peersRef.current.forEach(pc => pc.close());
+      peersRef.current.clear();
+      if (localStream.current) {
+        localStream.current.getTracks().forEach(track => track.stop());
+        localStream.current = null;
+      }
     };
   }, []);
 
@@ -518,7 +556,8 @@ export default function App() {
     pc.ontrack = (event) => {
       const audio = new Audio();
       audio.srcObject = event.streams[0];
-      audio.play();
+      audio.autoplay = true;
+      audio.play().catch(e => console.error("Audio playback failed", e));
     };
 
     if (localStream.current) {
@@ -527,26 +566,65 @@ export default function App() {
       });
     }
 
-    setPeers(prev => new Map(prev).set(targetId, pc));
+    peersRef.current.set(targetId, pc);
     return pc;
+  };
+
+  const initiateCall = async (targetId: string, socket: Socket) => {
+    if (peersRef.current.has(targetId)) return;
+    const pc = createPeer(targetId, socket);
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('voice_signal', { targetId, signal: offer });
+    } catch (err) {
+      console.error("Failed to create offer", err);
+    }
   };
 
   const startVoice = async () => {
     try {
-      localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
-      if (socket) {
-        // Signal to everyone in room? Actually signaling happens on demand.
+      if (!localStream.current) {
+        localStream.current = await navigator.mediaDevices.getUserMedia({ audio: true });
+      }
+      
+      if (socket && matchRoom) {
+        // Initiate calls to everyone already in the room
+        // Use a tie-breaker (socket.id < p.id) to ensure only one side initiates
+        matchRoom.players.forEach((p: any) => {
+          if (p.id !== socket.id && socket.id < p.id) {
+            initiateCall(p.id, socket);
+          }
+        });
       }
     } catch (err) {
       console.error("Failed to get local stream", err);
     }
   };
 
+  useEffect(() => {
+    if (chatSettings.voiceEnabled && gameState === 'playing') {
+      startVoice();
+    } else if (!chatSettings.voiceEnabled) {
+      // Close all connections if voice is disabled
+      peersRef.current.forEach(pc => pc.close());
+      peersRef.current.clear();
+      if (localStream.current) {
+        localStream.current.getTracks().forEach(track => track.stop());
+        localStream.current = null;
+      }
+    }
+  }, [gameState, chatSettings.voiceEnabled, socket, matchRoom]);
+
   const sendChatMessage = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!chatInput.trim() || !socket) return;
     socket.emit('chat_message', { text: chatInput, channel: chatSettings.channel });
     setChatInput('');
+    setIsChatOpen(false); // Close chat after sending on PC
+    if (gameRef.current && !isMobile) {
+      gameRef.current.lock(); // Re-lock pointer on PC
+    }
   };
 
   const toggleMute = (playerId: string) => {
@@ -629,11 +707,11 @@ export default function App() {
       {/* Crosshair */}
       {gameState === 'playing' && (isMouseLocked || isMobile) && !hudData.isOut && (
         <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className={`w-4 h-4 border-2 rounded-full flex items-center justify-center transition-all duration-200 ${
+          <div className={`${isMobile ? 'w-2 h-2 border' : 'w-4 h-4 border-2'} rounded-full flex items-center justify-center transition-all duration-200 ${
             hudData.canPickUp ? 'border-emerald-400 scale-150' : 
             hudData.isAimingAtEnemy ? 'border-red-500 scale-125' : 'border-white/50'
           }`}>
-            <div className={`w-1 h-1 rounded-full ${
+            <div className={`${isMobile ? 'w-0.5 h-0.5' : 'w-1 h-1'} rounded-full ${
               hudData.canPickUp ? 'bg-emerald-400' : 
               hudData.isAimingAtEnemy ? 'bg-red-500' : 'bg-white'
             }`} />
@@ -646,9 +724,9 @@ export default function App() {
         {gameState === 'playing' && (
           <>
             {/* Chat UI */}
-            <div className={`absolute bottom-24 left-6 z-[100] w-full max-w-[300px] pointer-events-none flex flex-col gap-2 ${isMobile ? (isLandscape ? 'scale-75 origin-bottom-left !bottom-4 !left-4' : 'scale-75 origin-bottom-left !bottom-20 !left-4') : ''}`}>
-              <div className="flex-1 overflow-y-auto max-h-[200px] flex flex-col gap-1 pointer-events-none custom-scrollbar">
-                {chatMessages.map(msg => (
+            <div className={`absolute bottom-24 left-6 z-[100] w-full max-w-[300px] flex flex-col gap-2 ${isMobile ? (isLandscape ? 'scale-75 origin-bottom-left !bottom-4 !left-4' : 'scale-75 origin-bottom-left !bottom-20 !left-4') : ''} ${isChatOpen ? 'pointer-events-auto' : 'pointer-events-none'}`}>
+              <div className={`flex-1 overflow-y-auto max-h-[200px] flex flex-col gap-1 custom-scrollbar-hidden ${isChatOpen ? 'pointer-events-auto !overflow-y-auto' : 'pointer-events-none !overflow-y-hidden'}`}>
+                {chatMessages.filter(msg => isChatOpen || (Date.now() - (msg.timestamp || 0) < 8000)).map(msg => (
                   <motion.div 
                     initial={{ opacity: 0, x: -10 }}
                     animate={{ opacity: 1, x: 0 }}
@@ -880,8 +958,15 @@ export default function App() {
                     <div className={`absolute bottom-8 right-8 flex flex-col gap-4 pointer-events-auto items-end ${isLandscape ? '' : ''}`}>
                       {/* Throw Button (Main Action) */}
                       <button 
-                        onTouchStart={() => gameRef.current?.setMobileAction('throw', true)}
-                        onTouchEnd={() => gameRef.current?.setMobileAction('throw', false)}
+                        onTouchStart={(e) => {
+                          gameRef.current?.setMobileAction('throw', true);
+                          handleLookTouchStart(e);
+                        }}
+                        onTouchMove={handleLookTouchMove}
+                        onTouchEnd={(e) => {
+                          gameRef.current?.setMobileAction('throw', false);
+                          handleLookTouchEnd(e);
+                        }}
                         className="w-24 h-24 rounded-full bg-red-500/20 backdrop-blur-md border border-red-500/30 flex items-center justify-center active:bg-red-500/50 active:scale-95 transition-all shadow-2xl group mb-2 mr-2"
                       >
                         <Target className="w-10 h-10 text-red-400 group-active:text-white" />
@@ -889,8 +974,15 @@ export default function App() {
                       
                       {/* Block Button (Secondary Action) */}
                       <button 
-                        onTouchStart={() => gameRef.current?.setMobileAction('block', true)}
-                        onTouchEnd={() => gameRef.current?.setMobileAction('block', false)}
+                        onTouchStart={(e) => {
+                          gameRef.current?.setMobileAction('block', true);
+                          handleLookTouchStart(e);
+                        }}
+                        onTouchMove={handleLookTouchMove}
+                        onTouchEnd={(e) => {
+                          gameRef.current?.setMobileAction('block', false);
+                          handleLookTouchEnd(e);
+                        }}
                         className="absolute bottom-0 right-28 w-16 h-16 rounded-full bg-blue-500/20 backdrop-blur-md border border-blue-500/30 flex items-center justify-center active:bg-blue-500/50 active:scale-95 transition-all shadow-xl group"
                       >
                         <Shield className="w-6 h-6 text-blue-400 group-active:text-white" />
@@ -1104,10 +1196,10 @@ export default function App() {
             </div>
 
             {/* Right Side (Actions & Modes) */}
-            <div className={`relative flex-1 bg-zinc-900/20 flex flex-col justify-center ${isMobile && isLandscape ? 'p-4' : 'p-6 md:p-16'} ${isMobile && !isLandscape ? 'pb-24' : ''}`}>
+            <div className={`relative flex-1 bg-zinc-900/20 flex flex-col justify-start md:justify-center overflow-y-auto ${isMobile && isLandscape ? 'p-4' : 'p-6 md:p-16'} ${isMobile && !isLandscape ? 'pb-24' : ''}`}>
               <div className="absolute inset-0 opacity-5 bg-[radial-gradient(circle_at_100%_100%,_var(--tw-gradient-stops))] from-emerald-500/40 via-transparent to-transparent pointer-events-none" />
               
-              <div className={`w-full ${isMobile && !isLandscape ? 'max-w-md mx-auto' : 'max-w-md'} space-y-4 md:space-y-6 relative z-10`}>
+              <div className={`w-full ${isMobile && !isLandscape ? 'max-w-md mx-auto' : 'max-w-md'} space-y-4 md:space-y-6 relative z-10 py-8`}>
                 <div className="text-[10px] font-black text-white/20 uppercase tracking-[0.5em] mb-2 md:mb-4 text-center md:text-left">Select Game Mode</div>
                 
                 <button 
@@ -1430,7 +1522,7 @@ export default function App() {
             <motion.div 
               initial={{ scale: 0.95, y: 20 }}
               animate={{ scale: 1, y: 0 }}
-              className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col h-[85vh] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${isMobile ? (isLandscape ? 'scale-[0.55] md:scale-100' : 'scale-[0.85] md:scale-100') : ''}`}
+              className={`w-full max-w-5xl bg-zinc-900 border border-white/10 rounded-[2.5rem] overflow-hidden flex flex-col h-[85vh] shadow-[0_0_100px_rgba(0,0,0,0.5)] ${isMobile ? (isLandscape ? 'scale-[0.5] md:scale-100' : 'scale-[0.8] md:scale-100') : ''}`}
             >
               {/* Header */}
               <div className={`${isMobile && isLandscape ? 'p-4' : 'p-8 md:p-12'} border-b border-white/5 flex items-end justify-between bg-gradient-to-b from-white/5 to-transparent`}>
@@ -1454,7 +1546,7 @@ export default function App() {
 
               {/* Tabs */}
               <div className={`flex ${isMobile && isLandscape ? 'px-4' : 'px-8 md:px-12'} gap-8 border-b border-white/5`}>
-                {(['Balls'] as const).map((tab) => (
+                {(['Balls', 'Trails'] as const).map((tab) => (
                   <button 
                     key={tab} 
                     onClick={() => setCustomizationTab(tab)}
@@ -1478,10 +1570,14 @@ export default function App() {
                   {customizationTab === 'Balls' && balls.map(ball => {
                     const isUnlocked = unlockedItems.includes(ball);
                     const price = ball === 'Yellow' ? 0 : 
-                                  ball === 'Neon Blue' ? 250 : 
-                                  ball === 'Neon Red' ? 250 : 
-                                  ball === 'Void' ? 1000 : 
-                                  ball === 'Plasma' ? 750 : 2000;
+                                 ball === 'Neon Blue' ? 500 : 
+                                 ball === 'Neon Red' ? 500 : 
+                                 ball === 'Rainbow' ? 1500 : 
+                                 ball === 'Void' ? 2500 : 
+                                 ball === 'Plasma' ? 3000 :
+                                 ball === 'Galaxy' ? 4000 :
+                                 ball === 'Magma' ? 4000 : 5000;
+                    const isSelected = selectedBall === ball;
 
                     return (
                       <button 
@@ -1495,7 +1591,7 @@ export default function App() {
                           }
                         }}
                         className={`group relative p-3 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all flex flex-col gap-3 md:gap-6 ${
-                          selectedBall === ball 
+                          isSelected 
                             ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.1)]' 
                             : isUnlocked 
                               ? 'bg-white/5 border-white/5 hover:border-white/20'
@@ -1509,12 +1605,15 @@ export default function App() {
                             ball === 'Neon Red' ? 'bg-red-400 border-red-200 shadow-[0_0_20px_rgba(248,113,113,0.6)]' :
                             ball === 'Void' ? 'bg-zinc-950 border-purple-900 shadow-[0_0_25px_rgba(147,51,234,0.4)]' :
                             ball === 'Plasma' ? 'bg-pink-500 border-pink-300 shadow-[0_0_25px_rgba(236,72,153,0.5)]' :
+                            ball === 'Galaxy' ? 'bg-indigo-600 border-indigo-400 shadow-[0_0_25px_rgba(99,102,241,0.5)]' :
+                            ball === 'Magma' ? 'bg-orange-600 border-orange-400 shadow-[0_0_25px_rgba(249,115,22,0.5)]' :
+                            ball === 'Emerald' ? 'bg-emerald-600 border-emerald-400 shadow-[0_0_25px_rgba(16,185,129,0.5)]' :
                             'bg-gradient-to-tr from-red-500 via-green-500 to-blue-500 border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]'
                           }`}>
                             {!isUnlocked && <Lock className="w-4 h-4 md:w-8 md:h-8 text-white/40 absolute" />}
                             <div className="w-6 h-6 md:w-10 md:h-10 rounded-full bg-white/10 border border-white/20 blur-[1px]" />
                           </div>
-                          {selectedBall === ball ? (
+                          {isSelected ? (
                             <div className="bg-emerald-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Equipped</div>
                           ) : !isUnlocked ? (
                             <div className="flex items-center gap-1.5 md:gap-2 bg-amber-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">
@@ -1532,10 +1631,68 @@ export default function App() {
                             {isUnlocked ? 'Standard Issue' : 'Restricted'}
                           </div>
                         </div>
+                      </button>
+                    );
+                  })}
 
-                        <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isUnlocked ? 'bg-white text-black' : 'bg-amber-500 text-black'}`}>
-                            {isUnlocked ? <Play className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
+                  {customizationTab === 'Trails' && trails.map(trail => {
+                    const isUnlocked = unlockedItems.includes(trail);
+                    const price = trail === 'Standard' ? 0 : 1000;
+                    const isSelected = selectedTrail === trail;
+
+                    return (
+                      <button 
+                        key={trail}
+                        onClick={() => {
+                          if (isUnlocked) {
+                            setSelectedTrail(trail);
+                            gameRef.current?.applyCustomization('trail', trail);
+                          } else if (playerProfile.coins >= price) {
+                            buyItem(trail, price);
+                          }
+                        }}
+                        className={`group relative p-3 md:p-6 rounded-[1.5rem] md:rounded-[2rem] border transition-all flex flex-col gap-3 md:gap-6 ${
+                          isSelected 
+                            ? 'bg-emerald-500/10 border-emerald-500/50 shadow-[0_0_40px_rgba(16,185,129,0.1)]' 
+                            : isUnlocked 
+                              ? 'bg-white/5 border-white/5 hover:border-white/20'
+                              : 'bg-black/40 border-white/5 opacity-80 hover:opacity-100'
+                        }`}
+                      >
+                        <div className="flex justify-between items-start">
+                          <div className={`w-12 h-12 md:w-20 md:h-20 rounded-full border-2 md:border-4 flex items-center justify-center transition-transform group-hover:scale-110 ${
+                            trail === 'Standard' ? 'bg-white/20 border-white/40' :
+                            trail === 'Fire' ? 'bg-orange-600 border-orange-400 shadow-[0_0_20px_rgba(249,115,22,0.6)]' :
+                            trail === 'Ice' ? 'bg-blue-400 border-blue-200 shadow-[0_0_20px_rgba(96,165,250,0.6)]' :
+                            'bg-yellow-400 border-yellow-200 shadow-[0_0_20px_rgba(251,191,36,0.6)]'
+                          }`}>
+                            {!isUnlocked && <Lock className="w-4 h-4 md:w-8 md:h-8 text-white/40 absolute" />}
+                            <div className="flex gap-1">
+                              {Array.from({ length: 3 }).map((_, i) => (
+                                <div key={i} className={`w-1 h-3 md:w-1.5 md:h-6 rounded-full ${
+                                  trail === 'Standard' ? 'bg-white/40' : 
+                                  trail === 'Fire' ? 'bg-orange-500' : 
+                                  trail === 'Ice' ? 'bg-blue-400' : 'bg-yellow-400'
+                                }`} style={{ opacity: 1 - i * 0.3 }} />
+                              ))}
+                            </div>
+                          </div>
+                          {isSelected ? (
+                            <div className="bg-emerald-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Equipped</div>
+                          ) : !isUnlocked ? (
+                            <div className="flex items-center gap-1.5 md:gap-2 bg-amber-500 text-black text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">
+                              <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-amber-700/30" />
+                              {price}
+                            </div>
+                          ) : (
+                            <div className="bg-white/10 text-white/40 text-[7px] md:text-[10px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded-full uppercase tracking-widest">Unlocked</div>
+                          )}
+                        </div>
+                        
+                        <div className="text-left">
+                          <div className="text-sm md:text-2xl font-black text-white italic uppercase tracking-tighter mb-0.5 md:mb-1">{trail}</div>
+                          <div className="text-[7px] md:text-[10px] font-bold text-white/30 uppercase tracking-widest">
+                            {isUnlocked ? 'Standard Issue' : 'Restricted'}
                           </div>
                         </div>
                       </button>
@@ -1852,8 +2009,7 @@ export default function App() {
                       {[
                         { title: 'Movement', desc: 'WASD or Joystick to navigate.', icon: Globe },
                         { title: 'Combat', desc: 'Left Click or Fire to throw.', icon: Target },
-                        { title: 'Defense', desc: 'Right Click or Block to deflect.', icon: Shield },
-                        { title: 'Recovery', desc: 'Walk over balls to replenish.', icon: Zap }
+                        { title: 'Defense', desc: 'Right Click or Block to deflect.', icon: Shield }
                       ].map((item, i) => (
                         <div key={i} className="flex gap-4 group">
                           <div className={`${isMobile && isLandscape ? 'w-8 h-8 rounded-xl' : 'w-12 h-12 rounded-2xl'} bg-white/5 flex items-center justify-center group-hover:bg-amber-500/10 transition-colors shrink-0`}>

@@ -401,6 +401,19 @@ function leaveRoom(io: Server, socket: any) {
   if (roomId) {
     const room = rooms.get(roomId);
     if (room) {
+      const player = room.players.find(p => p.id === socket.id);
+      if (player) {
+        io.to(roomId).emit("chat_message", {
+          id: Math.random().toString(36).substring(7),
+          senderId: "system",
+          senderName: "SYSTEM",
+          senderTeam: null,
+          text: `${player.name} has left the arena.`,
+          channel: "all",
+          timestamp: Date.now()
+        });
+      }
+
       // Remove player from array
       room.players = room.players.filter(p => p.id !== socket.id);
       socket.leave(roomId);
@@ -412,6 +425,23 @@ function leaveRoom(io: Server, socket: any) {
       if (room.players.length === 0) {
         rooms.delete(roomId);
       } else {
+        // Check if a whole team left
+        const bluePlayers = room.players.filter(p => p.team === "blue");
+        const redPlayers = room.players.filter(p => p.team === "red");
+
+        if (room.state === "playing") {
+          if (bluePlayers.length === 0) {
+            room.redWins = 4;
+            handleRoundEnd(io, room, "red");
+            return;
+          }
+          if (redPlayers.length === 0) {
+            room.blueWins = 4;
+            handleRoundEnd(io, room, "blue");
+            return;
+          }
+        }
+
         if (room.state === "ready_check" && room.players.length < 2) {
           room.state = "waiting";
         }
@@ -482,7 +512,7 @@ function startGame(io: Server, room: Room) {
     });
   }
   
-  io.to(room.id).emit("game_start", room);
+  io.to(room.id).emit("game_start", { ...room, serverTime: Date.now() });
 }
 
 function handleRoundEnd(io: Server, room: Room, winner: string) {
