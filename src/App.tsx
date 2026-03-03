@@ -78,17 +78,6 @@ export default function App() {
     checkMobile();
     window.addEventListener('resize', checkMobile);
 
-    // Request microphone permission early for voice chat
-    const requestMic = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach(track => track.stop()); // Stop immediately, we just wanted permission
-      } catch (err) {
-        console.warn("Microphone permission denied or not available", err);
-      }
-    };
-    requestMic();
-
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
@@ -328,6 +317,7 @@ export default function App() {
 
   const [showInGameMenu, setShowInGameMenu] = useState(false);
   const [showGameEnd, setShowGameEnd] = useState(false);
+  const [showEmoteWheel, setShowEmoteWheel] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
 
   // Use a ref for the HUD update callback to avoid stale closures
@@ -603,8 +593,15 @@ export default function App() {
           }
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to get local stream", err);
+      if (['NotAllowedError', 'PermissionDeniedError', 'NotFoundError'].includes(err.name)) {
+        setChatSettings(prev => ({ ...prev, voiceEnabled: false }));
+        // Only alert if we are actually trying to use voice chat actively
+        if (chatSettings.voiceEnabled) {
+          alert(`Microphone error: ${err.message}. Voice chat has been disabled.`);
+        }
+      }
     }
   };
 
